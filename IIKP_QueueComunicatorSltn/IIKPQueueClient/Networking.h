@@ -18,49 +18,98 @@ using namespace std;
 
 #pragma region Data
 
+    // Represents socket parameters: 
+    // unsigned short port for socket port
+    // unsigned address_ipv4 for IPv4 address
     typedef struct SOCKET_PARAMS
     {
-        unsigned short port;                      // Socket port
-        unsigned address_ipv4;                    // IPv4 address                                
+        unsigned short port;                      
+        unsigned address_ipv4;                                                 
     } SOCKETPARAMS;
 
+    // Represents TCP network parameters, null if protocol not supported:
+    // unsigned short listen_socket_units as number of listen sockets
+    // SOCKETPARAMS* listen_socket_params as array of listen socket params
+    // unsigned short accept_socket_units as number of accept sockets
+    // SOCKETPARAMS* accept_socket_params as array of accept socket params
+    // char* accept_socket_contexts as array of accept socket context roles
     typedef struct TCPNETWORK_PARAMS
     {
-        unsigned short listen_socket_units;       // Number of listen sockets
-        SOCKETPARAMS* listen_socket_params;       // Array of listen socket params
+        unsigned short listen_socket_units;       
+        SOCKETPARAMS* listen_socket_params;       
 
-        unsigned short accept_socket_units;       // Number of accept sockets
-        SOCKETPARAMS* accept_socket_params;       // Array of accept socket params
-        char* accept_socket_contexts;             // Array of accept socket context roles
+        unsigned short accept_socket_units;       
+        SOCKETPARAMS* accept_socket_params;       
+        char* accept_socket_contexts;  
+
+        void Dispose()
+        {
+            if(listen_socket_params != NULL)free(listen_socket_params);
+            if (accept_socket_params != NULL)free(accept_socket_params);
+            if (accept_socket_contexts != NULL)free(accept_socket_contexts);
+        }
+
     } TCPNETWORK_PARAMS;
 
+    // Represents UDP network parameters, null if protocol not supported:
+    // unsigned short accept_socket_units as number of accept sockets 
+    // SOCKETPARAMS* accept_socket_params as array of accept socket params
+    // char* accept_socket_contexts as list of accept socket context roles
+    // Note: Prefix accept used for sake of consistency, even though UDP has no listen sockets
     typedef struct UDPNETWORK_PARAMS
     {
-        unsigned short accept_socket_units;       // Number of accept sockets 
-        SOCKETPARAMS* accept_socket_params;       // Array of accept socket params
-        char* accept_socket_contexts;             // List of accept socket context roles
-    } UDPNETWORK_PARAMS;
-    //Note: Prefix accept used for sake of consistency, even though UDP has no listen sockets
+        unsigned short accept_socket_units;       
+        SOCKETPARAMS* accept_socket_params;       
+        char* accept_socket_contexts;  
 
+        void Dispose()
+        {
+            if (accept_socket_params != NULL)free(accept_socket_params);
+            if (accept_socket_params != NULL)free(accept_socket_params);
+        }
+    } UDPNETWORK_PARAMS;
+
+    // Represents network parameters for each transport layer protocol.
+    // TCPNETWORK_PARAMS* as pointer to tcp_params
+    // UDPNETWORK_PARAMS* as pointer to udp_params
     typedef struct NETWORKING_PARAMS
     {
-        TCPNETWORK_PARAMS* tcp_params;            // Pointer to tcp_params, null if not found
-        UDPNETWORK_PARAMS* udp_params;            // Pointer to udp_params, null if not found
+        TCPNETWORK_PARAMS* tcp_params;            
+        UDPNETWORK_PARAMS* udp_params;  
+
+        void Dispose()
+        {
+            if (tcp_params == NULL) { tcp_params->Dispose();  free(tcp_params); }
+            if (udp_params == NULL) { udp_params->Dispose();  free(udp_params); }
+        }
     } NETWORKING_PARAMS;
 
+    // Indicates status of try-parsed socket record in NetCfg.txt
+    enum SocketRecordParseErrCode { OK = 0, BAD_IP, BAD_PORTS, BAD_SERVICE };
+    
 #pragma endregion
 
 #pragma region FunctionsDecl
 
     // Loads network parameters from NetworkCfg.txt
-    // Returns pointer to NETWORKING_PARAMS structure (see in Data section above),
+    // Fills NETWORKING_PARAMS structure (see in Data section above), alocates if empty
     // null if file is not found or corrupted
-    void LoadNetworkingParams(NETWORKING_PARAMS** networkParams);
+    void LoadNetworkingParams(NETWORKING_PARAMS* networkParams);
+
+    // Closing file in secure manner
+    void SafeFileClose(FILE** file);
+
+    // Initializes WinSock2 library
+    // Returns true if succeeded, false otherwise.
+    bool InitializeWindowsSockets();
+
+    // Skips spacings ontop of the buff, length of buffSize stoping currLoc at first non-skipable element
+    void SkipSpacings(char* buff, unsigned short buffSize, int* currLoc);
+
 #pragma endregion
 
 #pragma region FunctionsImpl
-    // Initializes WinSock2 library
-    // Returns true if succeeded, false otherwise.
+
     bool InitializeWindowsSockets()
     {
         WSADATA wsaData;
@@ -78,9 +127,34 @@ using namespace std;
         if(file != NULL && *file!=NULL)fclose(*file);
     }
 
-    void LoadNetworkingParams(NETWORKING_PARAMS** networkParams)
+    void SkipSpacings(char* buff, unsigned short buffSize, int* currLoc)
     {
-        *networkParams = NULL;
+        while (*currLoc < buffSize && (buff[*currLoc] == ' ' || buff[*currLoc] == '\n' || buff[*currLoc] == '\t'))++currLoc;   // Skip body spacings
+    }
+
+    SocketRecordParseErrCode ParseTCPDefRecord(char* record, int length, TCPNETWORK_PARAMS* tcpParams)
+    {
+        bool startTagFound, ipPartFound, portsPartFound, servicePartFound, stopTagFound = 0;
+        for (int byteLoc = 0; byteLoc < length; ++byteLoc)
+        {
+            if (record[byteLoc] == '\n' || record[byteLoc] == '\t' || record[byteLoc] == ' ') SkipSpacings(&record[byteLoc], length, &byteLoc);
+            if (record[byteLoc] == '$') 
+            { 
+                if (!startTagFound)startTagFound = true;
+                else stopTagFound = true;
+            }
+
+            if(startTagFound && !ipPartFound && !portsPartFound && !servicePartFound && !stopTagFound)
+            
+        }
+
+
+        return OK;
+    }
+
+    void LoadNetworkingParams(NETWORKING_PARAMS* networkParams)
+    {
+
         char cCurrentPath[FILENAME_MAX];
         if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
             return ;
@@ -95,26 +169,26 @@ using namespace std;
 
         FILE* fptr = NULL;
         fopen_s(&fptr, cCurrentPath, "rb");
-        if (!fptr)
-            return;
-        //Configuration file not found
+        if (!fptr) return; //Configuration file not found
+
+        if (networkParams == NULL) networkParams = (NETWORKING_PARAMS*)malloc(sizeof(NETWORKING_PARAMS));
 
         int buffSize = 255;
         char* buff=(char*)(malloc(buffSize));
-        char* preBuff = (char*)(malloc(buffSize));
-        memset(preBuff, buffSize, buffSize);
         bool isFirstLine = true;
 
-        while (fgets(buff, buffSize, fptr))
+        unsigned clsIdx = 0;
+        char cutCharOldVal=0;
+        while (fgets(buff, buffSize, fptr))                         //Read line by line 
         {
             if (strstr(buff, "#Legend"))                            //Skip Legend section (last line)
             {
                 // Skip inner lines
                 while (!strstr(buff, "#"))
-                    fgets(buff, buffSize, fptr);
+                    if(!fgets(buff, buffSize, fptr)) return;        
 
                 //Trim Skip section ending
-                unsigned clsIdx = 0;
+                clsIdx = 0;
                 for (clsIdx; clsIdx < buffSize; ++clsIdx)
                 {
                     if (buff[clsIdx] == EOF) return;
@@ -127,17 +201,128 @@ using namespace std;
                     }
                 }
             }
-            else
-            {
-                if (strstr(buff, "%PROTOCOL"))
-                else if()
-            }
             
+            // Seek % starter          
+            for (clsIdx; clsIdx < buffSize; ++clsIdx)   // Seek in current line
+            {
+                if (clsIdx == buffSize) break;          // End of line, take another one
+                else if (buff[clsIdx] == EOF) return;   // End of file
+                else if (buff[clsIdx] == '%')           
+                {
+                    ++clsIdx;
+                    unsigned short protocolFoundID = 0;
+                    unsigned short skipOffset=0;
+                    if (clsIdx < buffSize)         // Found in current line
+                    {
+                        //Compares end of previous and following line
+                        if (strstr(buff, "%PROTOCOL") && fgets(buff, buffSize, fptr))
+                        {
+                            skipOffset = 7;
+                            cutCharOldVal = buff[7];                                //Save
+                            buff[7] = '\0';                                         //Cut
+                            if(!strcmp(buff, " \"TCP\":"))  protocolFoundID = 1;    //Compare
+                            buff[7] = cutCharOldVal;                                //Restore
+                        }
+                        else if (strstr(buff, "%PROTOCO") && fgets(buff, buffSize, fptr))
+                        {
+                            skipOffset = 8;
+                            cutCharOldVal = buff[8];
+                            buff[8] = '\0';
+                            if (!strcmp(buff, " L \"TCP\":")) protocolFoundID = 1;
+                            buff[8] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%PROTOC") && fgets(buff, buffSize, fptr))  
+                        {
+                            skipOffset = 9;
+                            cutCharOldVal = buff[9];
+                            buff[9] = '\0';
+                            if (!strcmp(buff, " OL \"TCP\":")) protocolFoundID = 1;
+                            buff[9] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%PROTO") && fgets(buff, buffSize, fptr))  
+                        {
+                            skipOffset = 10;
+                            cutCharOldVal = buff[10];
+                            buff[10] = '\0';
+                            if (!strcmp(buff, " COL \"TCP\":")) protocolFoundID = 1;
+                            buff[10] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%PROT") && fgets(buff, buffSize, fptr))  
+                        {
+                            skipOffset = 11;
+                            cutCharOldVal = buff[11];
+                            buff[11] = '\0';
+                            if (!strcmp(buff, " OCOL \"TCP\":")) protocolFoundID = 1;
+                            buff[11] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%PRO") && fgets(buff, buffSize, fptr))  
+                        {
+                            skipOffset = 12;
+                            cutCharOldVal = buff[12];
+                            buff[12] = '\0';
+                            if (!strcmp(buff, " TOCOL \"TCP\":")) protocolFoundID = 1;
+                            buff[12] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%PR") && fgets(buff, buffSize, fptr)) 
+                        {
+                            skipOffset = 13;
+                            cutCharOldVal = buff[13];
+                            buff[13] = '\0';
+                            if (!strcmp(buff, " OTOCOL \"TCP\":")) protocolFoundID = 1;
+                            buff[13] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%P") && fgets(buff, buffSize, fptr)) 
+                        {
+                            skipOffset = 14;
+                            cutCharOldVal = buff[14];
+                            buff[14] = '\0';
+                            if (!strcmp(buff, "ROTOCOL \"TCP\":")) protocolFoundID = 1;
+                            buff[14] = cutCharOldVal;
+                        }
+                        else if (strstr(buff, "%") && fgets(buff, buffSize, fptr))  
+                        {
+                            skipOffset = 15;
+                            cutCharOldVal = buff[15];
+                            buff[15] = '\0';
+                            if (!strcmp(buff, "PROTOCOL \"TCP\":"))  protocolFoundID = 1;
+                            buff[15] = cutCharOldVal;
+                        }
+
+                        if (protocolFoundID == 1) // Has TCP params
+                        {
+                            if (networkParams->tcp_params) networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));   // First TCP param
+                            for (int loc = skipOffset; skipOffset < buffSize; ++skipOffset)
+                            {
+                                SkipSpacings(&buff[loc], buffSize, &loc);
+                                if (buff[loc] == EOF) { networkParams->Dispose(); return; } // Bad syntax-no closing tag
+
+                                if (buff[loc] == '{')                                                       //Seek body start
+                                {
+                                    // Body detected
+                                    ++loc;
+                                    while (loc < buffSize && (buff[loc] == ' ' || buff[loc] == '\n' || buff[loc] == '\t')) ++loc;   // Skip body spacings
+
+                                    if (loc >= buffSize)    // If end line -> load new line
+                                    {
+                                        fgets(buff, buffSize, fptr);
+                                        loc = 0;
+                                    }
+
+                                    
+                                    else if()
+                                    
+
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             isFirstLine = false;
-            memcpy(preBuff, buff, buffSize);
         }
         free(buff);
-
         SafeFileClose(&fptr);      
     }
 
