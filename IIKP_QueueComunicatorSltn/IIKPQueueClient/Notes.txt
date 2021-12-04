@@ -1,0 +1,18 @@
+
+__________________________________________________________________________________________________________________________
+# Ugljesa
+
+// Pogledaj malloc da li mnozis br elem sa velicinom u bajtovima
+// Provjeri oslobadjanja
+// Promjeri leftlim i rightlim da li su ti ok
+// Kasnije provjer igdje mozes i da li ti se isplati mijenjati malloc za realloc na nekim mjestima
+// Provjeri optimizaciju &(some[5])
+// Optimizacija u pogledu eliminisanja razmaka gdje god je to moguce
+// drugi buff da obrises
+// succ i fail citanje pazi na buffer
+__________________________________________________________________________________________________________________________
+
+
+__________________________________________________________________________________________________________________________
+# Nikola
+__________________________________________________________________________________________________________________________
