@@ -10,6 +10,8 @@ ________________________________________________________________________________
 // Optimizacija u pogledu eliminisanja razmaka gdje god je to moguce
 // drugi buff da obrises
 // succ i fail citanje pazi na buffer
+// Eliminisi nedosupne klase IP adresa
+// alllocate chunk provjeravaj da ne predjes
 __________________________________________________________________________________________________________________________
 
 

@@ -15,9 +15,19 @@
 
 using namespace std;
 
+#pragma region IgnoreWarnings
+    #pragma warning(suppress : 6387)
+    #pragma warning(suppress : 6011)
+    #pragma warning(suppress : 26812)
+#pragma endregion
+
 #pragma region Constants
     #define MAX_PORTS_PER_RECORD 8
     #define MAX_RECORD_LENGTH   255
+#pragma endregion
+
+#pragma region Globals
+    char errMsg[PCAP_ERRBUF_SIZE + 1];
 #pragma endregion
 
 #pragma region Data
@@ -54,10 +64,10 @@ using namespace std;
             for (char loc = 0; loc < port_units; ++loc)
             {
                 printf("\n%u.%u.%u.%u:%u - %s", 
-                    (unsigned)(((char*)(&address_ipv4))[3]),
-                    (unsigned)(((char*)(&address_ipv4))[2]),
-                    (unsigned)(((char*)(&address_ipv4))[1]),
-                    (unsigned)(((char*)(&address_ipv4))[0]),
+                    (unsigned)(((unsigned char*)(&address_ipv4))[3]),
+                    (unsigned)(((unsigned char*)(&address_ipv4))[2]),
+                    (unsigned)(((unsigned char*)(&address_ipv4))[1]),
+                    (unsigned)(((unsigned char*)(&address_ipv4))[0]),
                     ports[loc],
                     contextStr);
             }  
@@ -96,6 +106,53 @@ using namespace std;
             if (accept_socket_contexts != NULL)free(accept_socket_contexts);
         }
 
+        void Format()
+        {
+            printf("\n----------------------------------------------------\n");
+            printf("Total listen socket units:\t%hu\n", listen_socket_units);
+
+            if (listen_socket_units > 0)
+            {
+                for (unsigned short loc = 0; loc < listen_socket_units; ++loc)
+                    printf("\t%u.%u.%u.%u:%u",
+                        (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[3]),
+                        (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[2]),
+                        (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[1]),
+                        (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[0]),
+                        listen_socket_params[loc].port);
+            }
+            else
+                printf("\t [NO DATA]");
+
+            if (accept_socket_units > 0)
+            {
+                char contextStr[20];
+                memset(contextStr, 0, 20);
+
+                printf("\n");
+                printf("Total accept socket units:\t%hu\n", accept_socket_units);
+                for (unsigned short loc = 0; loc < accept_socket_units; ++loc)
+                {
+                    switch (accept_socket_contexts[loc])
+                    {
+                    case 0: {sprintf_s(contextStr, "Listen Socket\0");  break; }
+                    case 1: {sprintf_s(contextStr, "Buffering Socket\0"); break; }
+                    }
+                    printf("\t%u.%u.%u.%u:%u - %s",
+                        (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[3]),
+                        (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[2]),
+                        (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[1]),
+                        (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[0]),
+                        listen_socket_params[loc].port,
+                        contextStr);
+                }
+            }
+            else
+                printf("\t [NO DATA]");
+
+            
+        }
+
     } TCPNETWORK_PARAMS;
 
     // Represents UDP network parameters, null if protocol not supported:
@@ -132,23 +189,29 @@ using namespace std;
     } NETWORKING_PARAMS;
 
     // Indicates status of try-parsed socket record in NetCfg.txt
-    enum  SocketRecordParseErrCode { OK = 0, NO_IP, BAD_IP, NO_PORTS, BAD_PORTS, NO_SERVICE, BAD_SERVICE, BAD_SYNTAX, NO_OP_TAG, NO_CLS_TAG, NULL_PARAM_DETECTED };
+    enum  SocketRecordParseErrCode { OK = 0, NO_IP, BAD_IP, NO_PORTS, BAD_PORTS, NO_SERVICE, BAD_SERVICE, BAD_SYNTAX, NO_OP_TAG, NO_CLS_TAG, NULL_PARAM_DETECTED, ADAPTER_ERR };
     
 #pragma endregion
 
 #pragma region FunctionsDecl
 
     // Loads network parameters from NetworkCfg.txt
-    // Fills NETWORKING_PARAMS structure (see in Data section above), alocates if empty
+    // Fills NETWORKING_PARAMS structure (see in Data section above)
     // null if file is not found or corrupted
-    void LoadNetworkingParams(NETWORKING_PARAMS* networkParams);
-
-    // Closing file in secure manner
-    void SafeFileClose(FILE* file);
+    // void* inputDataMemoryChunk memory chunk dynamically alocated by caller
+    // FILE** Config file
+    NETWORKING_PARAMS LoadNetworkingParams(void* inputDataMemoryChunk, FILE** file);
 
     // Initializes WinSock2 library
     // Returns true if succeeded, false otherwise.
     bool InitializeWindowsSockets();
+
+    // Aquires first IP address of first network adapter with supported addr_type of address ignoring Loopback adapter
+    bool GetApapterIP(unsigned* addr, int addr_type, bool ignoreLoopback);
+
+#pragma endregion
+
+#pragma region HelperFunctions
 
     // Skips leading spacings ontop of the buff, length of buffSize stoping currLoc at first non-skipable element
     void SkipSpacingsFront(char* buff, unsigned short buffSize, int* currLoc);
@@ -156,9 +219,19 @@ using namespace std;
     // Skips following spacings ontop of the buff, length of buffSize stoping currLoc at first non-skipable element
     void SkipSpacingsBack(char* buff, unsigned short buffSize, int* currLoc);
 
-    // Aquires first IPv4 address of first network adapter, check errno for success (0 if OK, other if an error occurred)
-    unsigned GetApapterIP();
+#pragma endregion
 
+#pragma region HelperFunctionsImpl
+
+    void SkipSpacingsFront(char* buff, unsigned short buffSize, int* currLoc)
+    {
+        while (*currLoc < buffSize && (buff[*currLoc] == ' ' || buff[*currLoc] == '\t'))++* currLoc;   // Skip body spacings
+    }
+
+    void SkipSpacingsBack(char* buff, unsigned short buffSize, int* currLoc)
+    {
+        while (*currLoc > 0 && (buff[*currLoc] == ' ' || buff[*currLoc] == '\t'))--* currLoc;   // Skip body spacings
+    }
 #pragma endregion
 
 #pragma region FunctionsImpl
@@ -175,49 +248,72 @@ using namespace std;
         return true;
     }
 
-    void SafeFileClose(FILE* file)
+    bool GetApapterIP(unsigned* addr, int addr_type, bool ignoreLoopback)
     {
-        if(file != NULL)fclose(file);
-    }
+        pcap_if_t* devices = NULL;
+        pcap_if_t* device = NULL;
+        memset(errMsg, 0, PCAP_ERRBUF_SIZE + 1);
 
-    void SkipSpacingsFront(char* buff, unsigned short buffSize, int* currLoc)
-    {
-        while (*currLoc < buffSize && (buff[*currLoc] == ' ' ||  buff[*currLoc] == '\t'))++*currLoc;   // Skip body spacings
-    }
-
-    void SkipSpacingsBack(char* buff, unsigned short buffSize, int* currLoc)
-    {
-        while (*currLoc > 0 && (buff[*currLoc] == ' ' || buff[*currLoc] == '\t'))--*currLoc;   // Skip body spacings
-    }
-
-    unsigned GetApapterIP()
-    {
-        
-        unsigned retVal = 0;
-
-        pcap_if_t* devices; // List of network interfaces
-        pcap_if_t* device;  // Network interface
-        int devs = 0;          // Interface counter
-        
-        char errorMsg[PCAP_ERRBUF_SIZE + 1]; // Buffer for errors
-        memset(errorMsg, 0, PCAP_ERRBUF_SIZE + 1);
-
-        // Retrieve the device list of network intefaces
-        if (pcap_findalldevs(&devices, errorMsg) == -1) 
-            return 1;
-        
-
-        if (devs == 0)  // Pronadje 0 urejdja?
+        if (pcap_findalldevs(&devices, errMsg) == -1)
         {
-            printf("\nNo interfaces found! Make sure WinPcap is installed.\n");
-            return -1;
+            printf("Error loading network adapters: %s", errMsg);
+            return 1;
         }
 
-        device = devices;
-        retVal = ((sockaddr_in*)device->addresses->addr)->sin_addr.s_addr;
+        if (devices == NULL)
+        {
+            printf("Loading interfaces failed with: %s", errMsg);
+            return false;
+        }
 
+        bool found = false;
+        for (device = devices; device!= NULL; device = device->next)
+        {
+            if (device->description != NULL &&  
+                strstr(device->description, "LOOPBACK") == NULL &&
+                strstr(device->description, "loopback") == NULL &&
+                strstr(device->description, "Loopback") == NULL)
+            {
+
+                pcap_addr_t* dev_addr = NULL;
+                for (dev_addr = device->addresses; dev_addr != NULL; dev_addr = dev_addr->next)
+                {
+                    if (dev_addr->addr->sa_family == addr_type && dev_addr->addr != NULL)
+                    {
+                        char tmpStr[INET_ADDRSTRLEN];
+                        inet_ntop(AF_INET, &((sockaddr_in*)dev_addr->addr)->sin_addr, tmpStr, INET_ADDRSTRLEN);
+                        
+                        *addr = 0;
+                        char* part = strtok(tmpStr, ".");
+                        int loc = 3;
+                        int tmpSegment;
+                        while (part != NULL)
+                        {
+                            if (part != ".")
+                            {
+                                tmpSegment = atoi(part);
+                                if (errno == EINVAL || errno == ERANGE)
+                                {
+                                    return false;
+                                }
+                                ((unsigned char*)(addr))[loc] = tmpSegment;
+                                --loc;
+                                if (loc < 0) break;
+                            }
+
+                            part = strtok(NULL, ".");
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (found) break;
+            }
+            
+        }
         pcap_freealldevs(devices);
-        return  retVal;
+        return found;
     }
 
 
@@ -252,32 +348,30 @@ using namespace std;
         {
             char ipStr[15];
             unsigned short tmpIpPart;
-            char tmpIp[4];
             *((unsigned*)tmpIp) = 0;
             memset(ipStr, 0, 15);
             memcpy(ipStr, &record[byteLoc], stopLoc - byteLoc + 1);
             SkipSpacingsFront(&record[byteLoc], stopLoc - byteLoc + 1, &byteLoc);
             char* part = strtok(ipStr, ".");
-            char tokensFound = 0;
+            char tokensFound = 3;
             while (part != NULL)
             {
-                ++tokensFound;
-                if (tokensFound > 4) return BAD_IP;
-                if (tmpIpPart = atoi(part) == 0)
-                {
+                if (tokensFound < 0) return BAD_IP;
+                tmpIpPart = atoi(part);
+                
                     if (errno == EINVAL || errno == ERANGE || tmpIpPart > 255 || tmpIpPart < 0)
                         return BAD_IP;
-
-                    tmpIp[tokensFound - 1] = 0;
-                }
-                else if (tmpIpPart != NULL)
-                    {tmpIp[tokensFound - 1] = ((char*)tmpIpPart)[0];} // Take lsbyte
+                
+                if(tmpIpPart != NULL)
+                {
+                    tmpIp[tokensFound] = ((unsigned char*)&tmpIpPart)[0];
+                    --tokensFound;
+                } // Take lsbyte
                 else return NULL_PARAM_DETECTED;
 
-                part = strtok(part, ".");
+                //part = strtok(part, ".");
+                part = strtok(NULL, ".");
             }
-
-            if (tokensFound < 4) return BAD_IP;
         }
         else                     // Symbolic format
         {
@@ -285,11 +379,15 @@ using namespace std;
             char tmpStr[4];
             *((int*)tmpStr) = 0;
             memcpy(tmpStr, &(record[byteLoc]), stopLoc - byteLoc + 1);
-            SkipSpacingsFront(tmpStr, 4, &byteLoc);
+            int mockLoc = 0;
+            SkipSpacingsFront(tmpStr, 4, &mockLoc);
 
-            if (!strcmp(tmpStr + byteLoc, "A"))                     //Handle address Any  
-                *((unsigned*)tmpStr) = GetApapterIP();
-            else if (!strcmp(tmpStr + byteLoc, "LH"))               // Handle localhost
+            if (!strcmp(tmpStr + mockLoc, "A"))                     //Handle address Any 
+            {
+                if( !GetApapterIP((unsigned*)tmpIp, AF_INET, true)) return ADAPTER_ERR;
+            }
+                
+            else if (!strcmp(tmpStr + mockLoc, "LH"))               // Handle localhost
             {
                 tmpIp[3] = 127;  tmpIp[2] = 0;   tmpIp[1] = 0; tmpIp[0] = 1;
             }
@@ -297,7 +395,7 @@ using namespace std;
 
         }
 
-        byteLoc = byteLoc + stopLoc + 1;
+        byteLoc = stopLoc + 1;
 
         // Port/s parsing
         if (byteLoc >= length) return BAD_SYNTAX;
@@ -391,30 +489,20 @@ using namespace std;
         return OK;
     }
 
-    void LoadNetworkingParams(NETWORKING_PARAMS* networkParams)
+    NETWORKING_PARAMS LoadNetworkingParams(void* inputDataMemoryChunk, FILE** file)
     {
 
-        char cCurrentPath[FILENAME_MAX];
-        if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-            return;
+        void* usedSectionEnd = inputDataMemoryChunk;
+        NETWORKING_PARAMS networkParams;
+        networkParams.tcp_params = NULL;
+        networkParams.udp_params = NULL;
 
-        while (cCurrentPath[strlen(cCurrentPath) - 1] != '\\')
-        cCurrentPath[strlen(cCurrentPath) - 1] = '\0';
-
-        strcat_s(cCurrentPath, "\\Release\\NetworkCfg.txt");  
-
-        cCurrentPath[sizeof(cCurrentPath) - 1] = '\0';
-        //Append config file name
-
-        FILE* fptr = NULL;
-        fopen_s(&fptr, cCurrentPath, "rb");
-        if (!fptr) return; //Configuration file not found
-
-        if (networkParams == NULL) networkParams = (NETWORKING_PARAMS*)malloc(sizeof(NETWORKING_PARAMS));
+        if (file == NULL || *file == NULL) return networkParams;
+        FILE* fptr = *file;
 
         char* buff=(char*)(malloc(MAX_RECORD_LENGTH));
+        if (buff == NULL) return networkParams;
         char* startBuffPtr = buff;
-        if (buff == NULL) return;
 
         int clsIdx = 0;
         char cutCharOldVal=0;
@@ -424,14 +512,19 @@ using namespace std;
         while (true)                         //Read line by line 
         {
             if (loadFlag)
-                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { networkParams->Dispose(); free(startBuffPtr); SafeFileClose(fptr); return; }
+                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) {
+                    free(startBuffPtr); return networkParams;
+                }
 
             if (strstr(buff, "#Legend"))                            //Skip Legend section (last line)
             {
                 // Skip inner lines
                 do
                 {
-                    if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose();  return; }
+                    if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) 
+                    {
+                        free(startBuffPtr);  return networkParams;
+                    }
                     clsIdx = 0;
                 }
                 while (!(delimitPtr=strstr(buff, "#")));   
@@ -443,10 +536,11 @@ using namespace std;
             }
             
             // Seek % starter          
+            bool seekProto = false;
             for (clsIdx; clsIdx < MAX_RECORD_LENGTH; ++clsIdx)   // Seek in current line
             {
-                if (clsIdx == MAX_RECORD_LENGTH || buff[clsIdx] == '\r') break;          // End of line, take another one
-                else if (buff[clsIdx] == EOF) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose(); return; }           // End of file
+                if (clsIdx == MAX_RECORD_LENGTH || buff[clsIdx] == '\r' || buff[clsIdx] == '\n') break;          // End of line, take another one
+                else if (buff[clsIdx] == EOF) { free(startBuffPtr); return networkParams; }           // End of file
                 else if (buff[clsIdx] == '%')           
                 {
                     ++clsIdx;        
@@ -568,8 +662,11 @@ using namespace std;
 
                         if (protocolFoundID == 1) // Has TCP params
                         {
-                            printf(">>Parsing TCP<<\n");
-                            if (networkParams->tcp_params) networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));   // First TCP param
+                            if (networkParams.tcp_params == NULL)
+                            {
+                                networkParams.tcp_params = (TCPNETWORK_PARAMS*)usedSectionEnd;          // First TCP param
+                                usedSectionEnd = ((char*)usedSectionEnd) + sizeof(TCPNETWORK_PARAMS);   // Allocate
+                            }
                             
                             int start, stop=-1;
                             bool openBodyFound = false;
@@ -578,15 +675,15 @@ using namespace std;
                             {
                                 if(buff[loc]=='_' || buff[loc] == '\t')
                                     SkipSpacingsFront(&buff[loc], MAX_RECORD_LENGTH, &loc);
-                                if (buff[loc] == EOF) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose();  return; } // Bad syntax-no closing tag
-                                if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r')    // If end line -> load new line
+                                if (buff[loc] == EOF) { free(startBuffPtr); return networkParams; } // Bad syntax-no closing tag
+                                if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r' || buff[loc] == '\n')    // If end line -> load new line
                                 {
                                     do
                                         if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) 
                                         {
                                             if (feof(fptr)) { } // Free buffer-a ili close file-a izaziva pucanje ???
-                                            else { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose();}
-                                            return;
+                                            else { free(startBuffPtr); }
+                                            return networkParams;
                                         }
                                     while(strlen(buff)==0);
                                     loc = 0;
@@ -600,9 +697,9 @@ using namespace std;
                                     openBodyFound = true;
                                     ++loc;
                                     SkipSpacingsFront(buff + loc, MAX_RECORD_LENGTH - loc, &loc);   // Skip body spacings
-                                    if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r')    // If end line -> load new line
+                                    if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r' || buff[loc] == '\n')    // If end line -> load new line
                                     {
-                                        if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose(); return; };
+                                        if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { free(startBuffPtr); return networkParams; };
                                         loc = 0;
                                         SkipSpacingsFront(buff, MAX_RECORD_LENGTH - loc, &loc);
                                         loc = -1;   // Restarts loc to 0 after break;
@@ -617,7 +714,7 @@ using namespace std;
                                     char recordStr[MAX_RECORD_LENGTH];
                                     for (int lineLoc = loc; lineLoc < MAX_RECORD_LENGTH; ++lineLoc)  // Continue searching in same line
                                     {
-                                        if (lineLoc >= MAX_RECORD_LENGTH || buff[lineLoc] == '\r')    // If end line -> load new line
+                                        if (lineLoc >= MAX_RECORD_LENGTH || buff[lineLoc] == '\r' || buff[lineLoc] == '\n')    // If end line -> load new line
                                         {
                                             if (openTagFound && !closedTagFound && findedAtLine == totalLinesFromHere)
                                             {
@@ -627,7 +724,7 @@ using namespace std;
 
                                             do
                                             {
-                                                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose();   return; }
+                                                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { free(startBuffPtr); return networkParams; }
                                                 else { lineLoc = 0; ++totalLinesFromHere; SkipSpacingsFront(buff, MAX_RECORD_LENGTH, &lineLoc); buff += lineLoc; }
                                             }while (lineLoc == MAX_RECORD_LENGTH);
          
@@ -637,7 +734,7 @@ using namespace std;
 
                                         if (buff[lineLoc] == '$')   // Delimiter found
                                         {
-                                            if (!openBodyFound && !closedTagFound) { openTagFound = true; start = lineLoc; ++lineLoc; findedAtLine = totalLinesFromHere; }
+                                            if (!openBodyFound && !openTagFound) { openTagFound = true; start = lineLoc; ++lineLoc; findedAtLine = totalLinesFromHere; }
                                             else if (openBodyFound && !closedTagFound) { closedTagFound = true; stop = lineLoc; ++lineLoc; }
                                             
                                             if (openBodyFound && closedTagFound)
@@ -646,86 +743,89 @@ using namespace std;
                                                 {
                                                     memcpy(buff, buff + lineLoc - 1, MAX_RECORD_LENGTH - lineLoc);
                                                     buff[MAX_RECORD_LENGTH - lineLoc] = '\0';
-                                                }
-                                                
+                                                }                      
+
                                                 SOCKET_GROUP_PARAMS acceptParams;
-                                                acceptParams.ports = (unsigned short*)malloc(MAX_PORTS_PER_RECORD);
+                                                acceptParams.ports = (unsigned short*)usedSectionEnd;               
+                                                usedSectionEnd = ((char*)usedSectionEnd) + MAX_PORTS_PER_RECORD *2;        // Allocate
+
                                                 if (ParseTCPDefRecord(buff, strlen(buff), &acceptParams, &lineLoc) != OK) 
-                                                { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose(); return; }
+                                                { free(startBuffPtr); return networkParams; }
+
 
                                                 if (acceptParams.ports != NULL && acceptParams.port_units < MAX_PORTS_PER_RECORD)
-                                                {
-                                                    unsigned short* newPtr= (unsigned short*)realloc(acceptParams.ports, acceptParams.port_units * 2);
-                                                    if (newPtr != NULL) acceptParams.ports = newPtr;
-                                                    
-                                                }
-
-                                                printf("\nLine parsed as: ");//#
-                                                acceptParams.Format();
+                                                    usedSectionEnd = ((char*)usedSectionEnd) - ((MAX_PORTS_PER_RECORD - acceptParams.port_units) * 2);    // Free extra               
 
                                                 switch (acceptParams.context_code)
                                                 {
                                                     case 0: // It is a listen socket group
                                                     {
-                                                        networkParams->tcp_params->listen_socket_units = acceptParams.port_units;   // How many sockets
-                                                        if (networkParams->tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
+                                                        networkParams.tcp_params->listen_socket_units = acceptParams.port_units;   // How many sockets
+                                                        if (networkParams.tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
                                                         {
-                                                            networkParams->tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(acceptParams.port_units* sizeof(SOCKETPARAMS));
+                                                            networkParams.tcp_params->listen_socket_params = (SOCKETPARAMS*)usedSectionEnd;
+                                                            usedSectionEnd = ((char*)usedSectionEnd + acceptParams.port_units * sizeof(SOCKETPARAMS));
+                                                               
                                                             for (int loc = 0; loc < acceptParams.port_units; ++loc)
                                                             {
-                                                                if (networkParams!=NULL &&
-                                                                    acceptParams.address_ipv4 != NULL && 
-                                                                    networkParams->tcp_params != NULL &&
-                                                                    networkParams->tcp_params->listen_socket_params!= NULL &&
-                                                                    networkParams->tcp_params->listen_socket_params[loc].address_ipv4 != NULL)
+                                                                if (acceptParams.address_ipv4 != NULL && 
+                                                                    networkParams.tcp_params != NULL &&
+                                                                    networkParams.tcp_params->listen_socket_params!= NULL &&
+                                                                    networkParams.tcp_params->listen_socket_params[loc].address_ipv4 != NULL)
                                                                 {
-                                                                    networkParams->tcp_params->listen_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
-                                                                    networkParams->tcp_params->listen_socket_params[loc].port = acceptParams.ports[loc];
+                                                                    networkParams.tcp_params->listen_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
+                                                                    networkParams.tcp_params->listen_socket_params[loc].port = acceptParams.ports[loc];
                                                                 }
                                                             }
                                                         }
+                                                        ++lineLoc;
+                                                        openTagFound = false;
+                                                        closedTagFound = false;
                                                         continue; 
                                                     }
                                                     case 1: // It is an accept socket
                                                     {
-                                                        networkParams->tcp_params->accept_socket_units = acceptParams.port_units;
-                                                        if (networkParams->tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
-                                                            networkParams->tcp_params->accept_socket_contexts = (char*)malloc(acceptParams.port_units);
+                                                        networkParams.tcp_params->accept_socket_units = acceptParams.port_units;
+                                                        if (networkParams.tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
+                                                            networkParams.tcp_params->accept_socket_contexts = (char*)usedSectionEnd;
+                                                            usedSectionEnd= ((char*)usedSectionEnd) +acceptParams.port_units;
 
-                                                        if (networkParams->tcp_params->accept_socket_params == NULL)
+                                                        if (networkParams.tcp_params->accept_socket_params == NULL)
                                                         {
-                                                            networkParams->tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(acceptParams.port_units * sizeof(SOCKETPARAMS));
+                                                            networkParams.tcp_params->accept_socket_params = (SOCKETPARAMS*)usedSectionEnd;
+                                                            usedSectionEnd = ((char*)usedSectionEnd) + acceptParams.port_units * sizeof(SOCKETPARAMS);
                                                             for (int loc = 0; loc < acceptParams.port_units; ++loc)
                                                             {
-                                                                if (networkParams!= NULL && 
-                                                                    networkParams->tcp_params!= NULL &&
-                                                                    networkParams->tcp_params->accept_socket_params!= NULL &&
-                                                                    networkParams->tcp_params->accept_socket_params[loc].address_ipv4 != NULL &&
-                                                                    networkParams->tcp_params->accept_socket_contexts != NULL)
+                                                                if (networkParams.tcp_params!= NULL &&
+                                                                    networkParams.tcp_params->accept_socket_params!= NULL &&
+                                                                    networkParams.tcp_params->accept_socket_params[loc].address_ipv4 != NULL &&
+                                                                    networkParams.tcp_params->accept_socket_contexts != NULL)
                                                                 {
-                                                                    networkParams->tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
-                                                                    networkParams->tcp_params->accept_socket_params[loc].port = acceptParams.ports[loc];
-                                                                    networkParams->tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
+                                                                    networkParams.tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
+                                                                    networkParams.tcp_params->accept_socket_params[loc].port = acceptParams.ports[loc];
+                                                                    networkParams.tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
                                                                 }
                                                             }
                                                         }
+                                                        ++lineLoc;
+                                                        openTagFound = false;
+                                                        closedTagFound = false;
                                                         continue;
                                                     }
                                                 }
-
-                                                openBodyFound = false;
-                                                closedTagFound = false;
                                             }
                                         }
                                         else if (buff[lineLoc] == '}')
                                         {
-                                            loc = lineLoc;
-                                            openBodyFound = false;
+                                            clsIdx = lineLoc+2;     // Skip }%
+                                            seekProto = true;
                                             break;
                                         }
-                                        else { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose(); return; }  // Emptry {}
                                     }
-                                    if(openBodyFound==true) { SafeFileClose(fptr); free(startBuffPtr); networkParams->Dispose(); return; }   // No } closure
+
+                                    // Puca na free startBuffPtr, provjeravao sam ne oslobadjam ga nigdje ranije, nije NULL i drzi staru vrijednost sa pocetka???
+                                    if(openBodyFound==true) {  free(startBuffPtr); return networkParams; }   // No } closure
+                                    if (seekProto) break;   // Brake
                                 }
                             }
                         }
@@ -733,8 +833,8 @@ using namespace std;
                 }
             }
         }
-        free(startBuffPtr);
-        SafeFileClose(fptr);      
+        free(startBuffPtr); 
+        return networkParams;
     }
 
 #pragma endregion

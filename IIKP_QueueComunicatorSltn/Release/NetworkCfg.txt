@@ -12,7 +12,7 @@
 					- 1 for buffering service (only supported at the moment)
 
 		 Example:		$ 192.168.1.254|27016|0 $			-> Listening socket on 192.168.1.254:27016
-					$ 192.168.1.254|27017, 27018, 27019|1 $		-> Accept sockets on   192.168.1.254:27017
+						$ 192.168.1.254|27017, 27018, 27019|1 $		-> Accept sockets on   192.168.1.254:27017
 										           		       192.168.1.254:27018
 										    			       192.168.1.254:27019
 											   Hosting buffering service
@@ -23,6 +23,7 @@
 
   %PROTOCOL "TCP":
   {
-		$ LH|27016|0 $
-		$ LH|27017|1 $
+		$			  LH|27016|0 $
+		$ 192.168.40.216|27018|1 $
+		$              A|27017|1 $
   }%
