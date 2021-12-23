@@ -146,7 +146,9 @@
     <ClCompile Include="IIKPQueueClient.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Buffering.h" />
     <ClInclude Include="Networking.h" />
+    <ClInclude Include="Queueing.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="Notes.txt" />

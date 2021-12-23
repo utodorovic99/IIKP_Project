@@ -27,7 +27,7 @@ using namespace std;
 #pragma endregion
 
 #pragma region Globals
-    char errMsg[PCAP_ERRBUF_SIZE + 1];
+    char NetworkingErrMsg[PCAP_ERRBUF_SIZE + 1];
 #pragma endregion
 
 #pragma region Data
@@ -41,7 +41,13 @@ using namespace std;
         unsigned address_ipv4;
         char port_units;
         unsigned short* ports;
-        char context_code;
+        unsigned char context_code;
+
+
+        void Prepare()
+        {
+            ports = NULL;
+        }
 
         void Dispose()
         {
@@ -97,29 +103,36 @@ using namespace std;
 
         unsigned short accept_socket_units;       
         SOCKETPARAMS* accept_socket_params;       
-        char* accept_socket_contexts;  
+        unsigned char* accept_socket_contexts;  
+
+        void Prepare()
+        {
+            listen_socket_params = NULL;
+            accept_socket_params = NULL;
+            accept_socket_contexts = NULL;
+        }
 
         void Dispose()
         {
-            if(listen_socket_params != NULL)free(listen_socket_params);
-            if (accept_socket_params != NULL)free(accept_socket_params);
-            if (accept_socket_contexts != NULL)free(accept_socket_contexts);
+            if(listen_socket_params != NULL)    free(listen_socket_params);
+            if (accept_socket_contexts != NULL) free(accept_socket_contexts);
+            if (accept_socket_params != NULL)   free(accept_socket_params);
         }
 
         void Format()
         {
-            printf("\n----------------------------------------------------\n");
-            printf("Total listen socket units:\t%hu\n", listen_socket_units);
+            printf("\nTotal listen socket units:\t%hu\n", listen_socket_units);
 
             if (listen_socket_units > 0)
             {
                 for (unsigned short loc = 0; loc < listen_socket_units; ++loc)
-                    printf("\t%u.%u.%u.%u:%u",
+                    printf("\t%u.%u.%u.%u:%u\t- %s\n",
                         (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[3]),
                         (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[2]),
                         (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[1]),
                         (unsigned)(((unsigned char*)(&((listen_socket_params[loc]).address_ipv4)))[0]),
-                        listen_socket_params[loc].port);
+                        listen_socket_params[loc].port, 
+                        "Listening Socket");
             }
             else
                 printf("\t [NO DATA]");
@@ -135,15 +148,14 @@ using namespace std;
                 {
                     switch (accept_socket_contexts[loc])
                     {
-                    case 0: {sprintf_s(contextStr, "Listen Socket\0");  break; }
-                    case 1: {sprintf_s(contextStr, "Buffering Socket\0"); break; }
+                        case 1: {sprintf_s(contextStr, "Buffering Socket\0"); break; }
                     }
-                    printf("\t%u.%u.%u.%u:%u - %s",
+                    printf("\t%u.%u.%u.%u:%u\t- %s\n",
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[3]),
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[2]),
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[1]),
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[0]),
-                        listen_socket_params[loc].port,
+                        accept_socket_params[loc].port,
                         contextStr);
                 }
             }
@@ -164,7 +176,13 @@ using namespace std;
     {
         unsigned short accept_socket_units;       
         SOCKETPARAMS* accept_socket_params;       
-        char* accept_socket_contexts;  
+        unsigned char* accept_socket_contexts;  
+
+        void Prepare()
+        {
+            accept_socket_params = NULL;
+            accept_socket_contexts = NULL;
+        }
 
         void Dispose()
         {
@@ -179,12 +197,18 @@ using namespace std;
     typedef struct NETWORKING_PARAMS
     {
         TCPNETWORK_PARAMS* tcp_params;            
-        UDPNETWORK_PARAMS* udp_params;  
+        UDPNETWORK_PARAMS* udp_params; 
+
+        void Prepare()
+        {
+            tcp_params = NULL;
+            udp_params = NULL;
+        }
 
         void Dispose()
         {
-            if (tcp_params == NULL) { tcp_params->Dispose();  free(tcp_params); }
-            if (udp_params == NULL) { udp_params->Dispose();  free(udp_params); }
+            if (tcp_params != NULL) { tcp_params->Dispose();  free(tcp_params); }
+            if (udp_params != NULL) { udp_params->Dispose();  free(udp_params); }
         }
     } NETWORKING_PARAMS;
 
@@ -200,7 +224,7 @@ using namespace std;
     // null if file is not found or corrupted
     // void* inputDataMemoryChunk memory chunk dynamically alocated by caller
     // FILE** Config file
-    NETWORKING_PARAMS LoadNetworkingParams(void* inputDataMemoryChunk, FILE** file);
+    NETWORKING_PARAMS LoadNetworkingParams(char* inputDataMemoryChunk, FILE** file);
 
     // Initializes WinSock2 library
     // Returns true if succeeded, false otherwise.
@@ -252,17 +276,17 @@ using namespace std;
     {
         pcap_if_t* devices = NULL;
         pcap_if_t* device = NULL;
-        memset(errMsg, 0, PCAP_ERRBUF_SIZE + 1);
+        memset(NetworkingErrMsg, 0, PCAP_ERRBUF_SIZE + 1);
 
-        if (pcap_findalldevs(&devices, errMsg) == -1)
+        if (pcap_findalldevs(&devices, NetworkingErrMsg) == -1)
         {
-            printf("Error loading network adapters: %s", errMsg);
+            printf("Error loading network adapters: %s", NetworkingErrMsg);
             return 1;
         }
 
         if (devices == NULL)
         {
-            printf("Loading interfaces failed with: %s", errMsg);
+            printf("Loading interfaces failed with: %s", NetworkingErrMsg);
             return false;
         }
 
@@ -323,8 +347,8 @@ using namespace std;
         char tmpIp[4];
         unsigned short portArr[MAX_PORTS_PER_RECORD];
         memset(portArr, 0, MAX_PORTS_PER_RECORD * 2);
-        char portsFound = 0;
-        char tmpService = 0;
+        unsigned char portsFound = 0;
+        unsigned char tmpService = 0;
         int byteLoc = 0;
         int stopLoc = 0;
 
@@ -434,7 +458,7 @@ using namespace std;
                 }
 
                 portArr[portsFound - 1] = tmpPort;
-                part = strtok(part, ",");
+                part = strtok(NULL, ",");
             }
         }
         else { portArr[portsFound] = atoi(portStr); portsFound++; }
@@ -442,6 +466,7 @@ using namespace std;
 
         if (portsFound == 0)   return BAD_PORTS;
 
+        byteLoc = stopLoc + 2;
         byteLoc = stopLoc + 2;
         if (byteLoc >= length) return BAD_SYNTAX;
 
@@ -451,6 +476,9 @@ using namespace std;
         if (byteLoc >= length) return BAD_SYNTAX;
         if (record[byteLoc] == '\n' || record[byteLoc] == '\t' || record[byteLoc] == ' ') SkipSpacingsFront(&record[byteLoc], length, &byteLoc);
         if (byteLoc >= length) return BAD_SYNTAX;
+
+        tmpService = record[byteLoc] - '0';
+        if (tmpService != 0 && tmpService != 1) return BAD_SERVICE;
 
         //Seek closing Tag
         bool stopTagFound = false;
@@ -489,20 +517,19 @@ using namespace std;
         return OK;
     }
 
-    NETWORKING_PARAMS LoadNetworkingParams(void* inputDataMemoryChunk, FILE** file)
+    NETWORKING_PARAMS LoadNetworkingParams(char* inputDataMemoryChunk, FILE** file)
     {
 
-        void* usedSectionEnd = inputDataMemoryChunk;
+        char* usedSectionEnd = inputDataMemoryChunk;
         NETWORKING_PARAMS networkParams;
-        networkParams.tcp_params = NULL;
-        networkParams.udp_params = NULL;
+        networkParams.Prepare();
 
         if (file == NULL || *file == NULL) return networkParams;
         FILE* fptr = *file;
 
-        char* buff=(char*)(malloc(MAX_RECORD_LENGTH));
-        if (buff == NULL) return networkParams;
-        char* startBuffPtr = buff;
+        char buff[MAX_RECORD_LENGTH];
+        memset(buff, 0, MAX_RECORD_LENGTH);
+        char* buff_it = buff;
 
         int clsIdx = 0;
         char cutCharOldVal=0;
@@ -512,26 +539,23 @@ using namespace std;
         while (true)                         //Read line by line 
         {
             if (loadFlag)
-                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) {
-                    free(startBuffPtr); return networkParams;
-                }
+                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams;
+                
 
-            if (strstr(buff, "#Legend"))                            //Skip Legend section (last line)
+            if (strstr(buff_it, "#Legend"))                            //Skip Legend section (last line)
             {
                 // Skip inner lines
                 do
                 {
-                    if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) 
-                    {
-                        free(startBuffPtr);  return networkParams;
-                    }
+                    if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams;
+
                     clsIdx = 0;
                 }
-                while (!(delimitPtr=strstr(buff, "#")));   
+                while (!(delimitPtr=strstr(buff_it, "#")));   
                 ++delimitPtr;
 
                 //Trim Skip section ending
-                sprintf_s(buff, MAX_RECORD_LENGTH, "%s\0", delimitPtr);
+                sprintf_s(buff_it, MAX_RECORD_LENGTH, "%s\0", delimitPtr);
                 clsIdx = 0;
             }
             
@@ -539,9 +563,9 @@ using namespace std;
             bool seekProto = false;
             for (clsIdx; clsIdx < MAX_RECORD_LENGTH; ++clsIdx)   // Seek in current line
             {
-                if (clsIdx == MAX_RECORD_LENGTH || buff[clsIdx] == '\r' || buff[clsIdx] == '\n') break;          // End of line, take another one
-                else if (buff[clsIdx] == EOF) { free(startBuffPtr); return networkParams; }           // End of file
-                else if (buff[clsIdx] == '%')           
+                if (clsIdx == MAX_RECORD_LENGTH || buff_it[clsIdx] == '\r' || buff_it[clsIdx] == '\n') break;          // End of line, take another one
+                else if (buff_it[clsIdx] == EOF) return networkParams;            // End of file
+                else if (buff_it[clsIdx] == '%')           
                 {
                     ++clsIdx;        
                     unsigned short protocolFoundID = 0;
@@ -550,113 +574,113 @@ using namespace std;
                     if (clsIdx < MAX_RECORD_LENGTH)         // Found in current line
                     {
                         //Compares end of previous and following line
-                        if ((cutPtr =strstr(buff, "%PROTOCOL\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        if ((cutPtr =strstr(buff_it, "%PROTOCOL\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 9;
-                            cutCharOldVal = buff[15];                                //Save
-                            buff[15] = '\0';                                         //Cut
-                            if(!strcmp(buff+skipOffset+1, "\"TCP\""))  protocolFoundID = 1;    //Compare
-                            buff[15] = cutCharOldVal;                                //Restore
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[15];                                //Save
+                            buff_it[15] = '\0';                                         //Cut
+                            if(!strcmp(buff_it+skipOffset+1, "\"TCP\""))  protocolFoundID = 1;    //Compare
+                            buff_it[15] = cutCharOldVal;                                //Restore
+                            buff_it = buff_it + skipOffset + 7;
                         }
-                        else if (cutPtr = strstr(buff, "%PROTOCOL"))
+                        else if (cutPtr = strstr(buff_it, "%PROTOCOL"))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 9;
-                            cutCharOldVal = buff[15];                                //Save
-                            buff[15] = '\0';                                         //Cut
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;    //Compare
-                            buff[15] = cutCharOldVal;      
-                            buff = buff + skipOffset + 7;//Restore   
+                            cutCharOldVal = buff_it[15];                                //Save
+                            buff_it[15] = '\0';                                         //Cut
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;    //Compare
+                            buff_it[15] = cutCharOldVal;      
+                            buff_it = buff_it + skipOffset + 7;//Restore   
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PROTOCO\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PROTOCO\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 10;
-                            cutCharOldVal = buff[16];
-                            buff[16] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[16] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[16];
+                            buff_it[16] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[16] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PROTOC\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PROTOC\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 11;
-                            cutCharOldVal = buff[17];
-                            buff[17] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[17] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[17];
+                            buff_it[17] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[17] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PROTO\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PROTO\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 12;
-                            cutCharOldVal = buff[18];
-                            buff[18] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[18] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[18];
+                            buff_it[18] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[18] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PROT\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PROT\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 13;
-                            cutCharOldVal = buff[19];
-                            buff[19] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[19] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[19];
+                            buff_it[19] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[19] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PRO\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PRO\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 14;
-                            cutCharOldVal = buff[20];
-                            buff[20] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[20] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[20];
+                            buff_it[20] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[20] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%PR\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%PR\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 15;
-                            cutCharOldVal = buff[21];
-                            buff[21] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[21] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[21];
+                            buff_it[21] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[21] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff, "%P\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it, "%P\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 16;
-                            cutCharOldVal = buff[22];
-                            buff[22] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[22] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[22];
+                            buff_it[22] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[22] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
-                        else if ((cutPtr = strstr(buff + clsIdx + skipOffset, "%\r")) && fgets(buff, MAX_RECORD_LENGTH, fptr))
+                        else if ((cutPtr = strstr(buff_it + clsIdx + skipOffset, "%\r")) && fgets(buff_it, MAX_RECORD_LENGTH, fptr))
                         {
-                            buff = cutPtr;
+                            buff_it = cutPtr;
                             skipOffset = 17;
-                            cutCharOldVal = buff[23];
-                            buff[23] = '\0';
-                            if (!strcmp(buff + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
-                            buff[23] = cutCharOldVal;
-                            buff = buff + skipOffset + 7;
+                            cutCharOldVal = buff_it[23];
+                            buff_it[23] = '\0';
+                            if (!strcmp(buff_it + skipOffset + 1, "\"TCP\""))  protocolFoundID = 1;
+                            buff_it[23] = cutCharOldVal;
+                            buff_it = buff_it + skipOffset + 7;
                             skipOffset += 7;
                         }
 
@@ -665,6 +689,7 @@ using namespace std;
                             if (networkParams.tcp_params == NULL)
                             {
                                 networkParams.tcp_params = (TCPNETWORK_PARAMS*)usedSectionEnd;          // First TCP param
+                                networkParams.tcp_params->Prepare();
                                 usedSectionEnd = ((char*)usedSectionEnd) + sizeof(TCPNETWORK_PARAMS);   // Allocate
                             }
                             
@@ -673,35 +698,31 @@ using namespace std;
 
                             for (int loc = 0; loc < MAX_RECORD_LENGTH; ++loc)  // Continue searching in same line
                             {
-                                if(buff[loc]=='_' || buff[loc] == '\t')
-                                    SkipSpacingsFront(&buff[loc], MAX_RECORD_LENGTH, &loc);
-                                if (buff[loc] == EOF) { free(startBuffPtr); return networkParams; } // Bad syntax-no closing tag
-                                if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r' || buff[loc] == '\n')    // If end line -> load new line
+                                if(buff_it[loc]=='_' || buff_it[loc] == '\t')
+                                    SkipSpacingsFront(&buff_it[loc], MAX_RECORD_LENGTH, &loc);
+                                if (buff_it[loc] == EOF)  return networkParams;  // Bad syntax-no closing tag
+                                if (loc >= MAX_RECORD_LENGTH || buff_it[loc] == '\r' || buff_it[loc] == '\n')    // If end line -> load new line
                                 {
                                     do
-                                        if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) 
-                                        {
-                                            if (feof(fptr)) { } // Free buffer-a ili close file-a izaziva pucanje ???
-                                            else { free(startBuffPtr); }
-                                            return networkParams;
-                                        }
-                                    while(strlen(buff)==0);
+                                        if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) 
+                                            return networkParams;  
+                                    while(strlen(buff_it)==0);
                                     loc = 0;
-                                    SkipSpacingsFront(buff, MAX_RECORD_LENGTH - loc, &loc);
+                                    SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH - loc, &loc);
                                     loc = -1;   // Restarts loc to 0 after break;
                                     continue;
                                 }
 
-                                if (buff[loc] == '{')                                    // Body detected
+                                if (buff_it[loc] == '{')                                    // Body detected
                                 {
                                     openBodyFound = true;
                                     ++loc;
-                                    SkipSpacingsFront(buff + loc, MAX_RECORD_LENGTH - loc, &loc);   // Skip body spacings
-                                    if (loc >= MAX_RECORD_LENGTH || buff[loc] == '\r' || buff[loc] == '\n')    // If end line -> load new line
+                                    SkipSpacingsFront(buff_it + loc, MAX_RECORD_LENGTH - loc, &loc);   // Skip body spacings
+                                    if (loc >= MAX_RECORD_LENGTH || buff_it[loc] == '\r' || buff_it[loc] == '\n')    // If end line -> load new line
                                     {
-                                        if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { free(startBuffPtr); return networkParams; };
+                                        if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams; 
                                         loc = 0;
-                                        SkipSpacingsFront(buff, MAX_RECORD_LENGTH - loc, &loc);
+                                        SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH - loc, &loc);
                                         loc = -1;   // Restarts loc to 0 after break;
                                         continue;
                                     }
@@ -714,25 +735,25 @@ using namespace std;
                                     char recordStr[MAX_RECORD_LENGTH];
                                     for (int lineLoc = loc; lineLoc < MAX_RECORD_LENGTH; ++lineLoc)  // Continue searching in same line
                                     {
-                                        if (lineLoc >= MAX_RECORD_LENGTH || buff[lineLoc] == '\r' || buff[lineLoc] == '\n')    // If end line -> load new line
+                                        if (lineLoc >= MAX_RECORD_LENGTH || buff_it[lineLoc] == '\r' || buff_it[lineLoc] == '\n')    // If end line -> load new line
                                         {
                                             if (openTagFound && !closedTagFound && findedAtLine == totalLinesFromHere)
                                             {
                                                 memset(recordStr, 0, MAX_RECORD_LENGTH);
-                                                memcpy(recordStr, buff + lineLoc, MAX_RECORD_LENGTH - lineLoc);
+                                                memcpy(recordStr, buff_it + lineLoc, MAX_RECORD_LENGTH - lineLoc);
                                             }
 
                                             do
                                             {
-                                                if (!fgets(buff, MAX_RECORD_LENGTH, fptr)) { free(startBuffPtr); return networkParams; }
-                                                else { lineLoc = 0; ++totalLinesFromHere; SkipSpacingsFront(buff, MAX_RECORD_LENGTH, &lineLoc); buff += lineLoc; }
+                                                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams; 
+                                                else { lineLoc = 0; ++totalLinesFromHere; SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH, &lineLoc); buff_it += lineLoc; }
                                             }while (lineLoc == MAX_RECORD_LENGTH);
          
                                             lineLoc = -1;  
                                             continue;
                                         }
 
-                                        if (buff[lineLoc] == '$')   // Delimiter found
+                                        if (buff_it[lineLoc] == '$')   // Delimiter found
                                         {
                                             if (!openBodyFound && !openTagFound) { openTagFound = true; start = lineLoc; ++lineLoc; findedAtLine = totalLinesFromHere; }
                                             else if (openBodyFound && !closedTagFound) { closedTagFound = true; stop = lineLoc; ++lineLoc; }
@@ -741,16 +762,16 @@ using namespace std;
                                             {
                                                 if(lineLoc>0)
                                                 {
-                                                    memcpy(buff, buff + lineLoc - 1, MAX_RECORD_LENGTH - lineLoc);
-                                                    buff[MAX_RECORD_LENGTH - lineLoc] = '\0';
+                                                    memcpy(buff_it, buff_it + lineLoc - 1, MAX_RECORD_LENGTH - lineLoc);
+                                                    buff_it[MAX_RECORD_LENGTH - lineLoc] = '\0';
                                                 }                      
 
                                                 SOCKET_GROUP_PARAMS acceptParams;
+                                                acceptParams.Prepare();
                                                 acceptParams.ports = (unsigned short*)usedSectionEnd;               
                                                 usedSectionEnd = ((char*)usedSectionEnd) + MAX_PORTS_PER_RECORD *2;        // Allocate
 
-                                                if (ParseTCPDefRecord(buff, strlen(buff), &acceptParams, &lineLoc) != OK) 
-                                                { free(startBuffPtr); return networkParams; }
+                                                if (ParseTCPDefRecord(buff_it, strlen(buff_it), &acceptParams, &lineLoc) != OK) return networkParams;
 
 
                                                 if (acceptParams.ports != NULL && acceptParams.port_units < MAX_PORTS_PER_RECORD)
@@ -764,6 +785,7 @@ using namespace std;
                                                         if (networkParams.tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
                                                         {
                                                             networkParams.tcp_params->listen_socket_params = (SOCKETPARAMS*)usedSectionEnd;
+
                                                             usedSectionEnd = ((char*)usedSectionEnd + acceptParams.port_units * sizeof(SOCKETPARAMS));
                                                                
                                                             for (int loc = 0; loc < acceptParams.port_units; ++loc)
@@ -787,7 +809,7 @@ using namespace std;
                                                     {
                                                         networkParams.tcp_params->accept_socket_units = acceptParams.port_units;
                                                         if (networkParams.tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
-                                                            networkParams.tcp_params->accept_socket_contexts = (char*)usedSectionEnd;
+                                                            networkParams.tcp_params->accept_socket_contexts = (unsigned char*)usedSectionEnd;
                                                             usedSectionEnd= ((char*)usedSectionEnd) +acceptParams.port_units;
 
                                                         if (networkParams.tcp_params->accept_socket_params == NULL)
@@ -815,7 +837,7 @@ using namespace std;
                                                 }
                                             }
                                         }
-                                        else if (buff[lineLoc] == '}')
+                                        else if (buff_it[lineLoc] == '}')
                                         {
                                             clsIdx = lineLoc+2;     // Skip }%
                                             seekProto = true;
@@ -823,8 +845,8 @@ using namespace std;
                                         }
                                     }
 
-                                    // Puca na free startBuffPtr, provjeravao sam ne oslobadjam ga nigdje ranije, nije NULL i drzi staru vrijednost sa pocetka???
-                                    if(openBodyFound==true) {  free(startBuffPtr); return networkParams; }   // No } closure
+                                    // Puca na free startbuff_itPtr, provjeravao sam ne oslobadjam ga nigdje ranije, nije NULL i drzi staru vrijednost sa pocetka???
+                                    if(openBodyFound==true)  return networkParams;    // No } closure
                                     if (seekProto) break;   // Brake
                                 }
                             }
@@ -833,7 +855,6 @@ using namespace std;
                 }
             }
         }
-        free(startBuffPtr); 
         return networkParams;
     }
 

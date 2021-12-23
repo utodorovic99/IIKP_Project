@@ -12,8 +12,133 @@ ________________________________________________________________________________
 // succ i fail citanje pazi na buffer
 // Eliminisi nedosupne klase IP adresa
 // alllocate chunk provjeravaj da ne predjes
+// provjeri da li je malloc vratio null
 __________________________________________________________________________________________________________________________
+Rucno punjenje strukture:
+            /////////////////////////////MANUALLY LOADING NETWORK PARAMS//////////////////////////////////////////////////
+            //networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));
+            //if (networkParams->tcp_params == NULL) break;
+            //networkParams->tcp_params->Prepare();
 
+            //networkParams->tcp_params->listen_socket_units = 1;
+            //networkParams->tcp_params->accept_socket_units = 3;
+
+            //networkParams->tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(1 * sizeof(SOCKETPARAMS));
+            //if (networkParams->tcp_params->listen_socket_params == NULL) break;
+
+            //networkParams->tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(3 * sizeof(SOCKETPARAMS));
+            //if (networkParams->tcp_params->accept_socket_params == NULL) break;
+
+            //unsigned addr;
+            //GetApapterIP(&addr, AF_INET, true);
+            //networkParams->tcp_params->listen_socket_params->address_ipv4 = addr;
+            //networkParams->tcp_params->listen_socket_units = 1;
+            //networkParams->tcp_params->listen_socket_params->port = 27016;
+            //networkParams->tcp_params->accept_socket_params->address_ipv4 = addr;
+            //networkParams->tcp_params->accept_socket_params[0].port = 27018;
+            //networkParams->tcp_params->accept_socket_params[1].port = 27019;
+            //networkParams->tcp_params->accept_socket_params[2].port = 27020;
+            //networkParams->tcp_params->accept_socket_params[0].address_ipv4 = addr;
+            //networkParams->tcp_params->accept_socket_params[1].address_ipv4 = addr;
+            //networkParams->tcp_params->accept_socket_params[2].address_ipv4 = addr;
+            //networkParams->tcp_params->accept_socket_contexts = (char*)(malloc(3));
+            //networkParams->tcp_params->accept_socket_units = 3;
+            //networkParams->tcp_params->accept_socket_contexts[0] = 1;
+            //networkParams->tcp_params->accept_socket_contexts[1] = 1;
+            //networkParams->tcp_params->accept_socket_contexts[2] = 1;
+            //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+__________________________________________________________________________________________________________________________
+Stara verzija sa bug-om
+
+char cCurrentPath[FILENAME_MAX];
+    if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+    {
+        printf("NetCfg file missing, closing..\n");
+        return -2;
+    }
+    else
+        printf("Loading config data..\n");
+
+    // Trenutno zbog bug-a van upotrebe
+    //while (cCurrentPath[strlen(cCurrentPath) - 1] != '\\')
+    //    cCurrentPath[strlen(cCurrentPath) - 1] = '\0';
+
+    //strcat_s(cCurrentPath, "\\Release\\NetworkCfg.txt");
+
+    //cCurrentPath[sizeof(cCurrentPath) - 1] = '\0';
+    ////Append config file name
+
+    //FILE* fptr = NULL;
+    //fopen_s(&fptr, cCurrentPath, "rb");
+    //if (!fptr)
+    //{
+    //    printf("Opening NetCfg failed, closing..\n");
+    //    return -2;
+    //}
+
+    //networkParams = (NETWORKING_PARAMS*)malloc(sizeof(networkParams));
+    //void* inputDataMemoryChunk = malloc(MAX_MEDIATOR_BUFF_SIZE);
+    //void* usedSectionEnd = NULL;
+
+    //NETWORKING_PARAMS tmpParams = LoadNetworkingParams(inputDataMemoryChunk, &fptr);
+    NETWORKING_PARAMS* tmpParams = (NETWORKING_PARAMS*)malloc(sizeof(NETWORKING_PARAMS));
+
+    tmpParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));
+    tmpParams->tcp_params->listen_socket_units = 1;
+    tmpParams->tcp_params->accept_socket_units = 3;
+    tmpParams->tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(1 * sizeof(SOCKETPARAMS));
+    tmpParams->tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(3 * sizeof(SOCKETPARAMS));
+    unsigned addr;
+    GetApapterIP(&addr, AF_INET, true);
+    tmpParams->tcp_params->listen_socket_params->address_ipv4 = addr;
+    tmpParams->tcp_params->listen_socket_params->port = 2016;
+    tmpParams->tcp_params->accept_socket_params->address_ipv4 = addr;
+    tmpParams->tcp_params->accept_socket_params[0].port = 2018;
+    tmpParams->tcp_params->accept_socket_params[1].port = 2019;
+    tmpParams->tcp_params->accept_socket_params[2].port = 2020;
+    tmpParams->tcp_params->accept_socket_params[0].address_ipv4 = addr;
+    tmpParams->tcp_params->accept_socket_params[1].address_ipv4 = addr;
+    tmpParams->tcp_params->accept_socket_params[2].address_ipv4 = addr;
+    tmpParams->tcp_params->accept_socket_contexts = (char*)(malloc(3));
+    tmpParams->tcp_params->accept_socket_contexts[0] = 1;
+    tmpParams->tcp_params->accept_socket_contexts[1] = 1;
+    tmpParams->tcp_params->accept_socket_contexts[2] = 1;
+
+    // manually realloc, realloc() would mess pointers up
+   // if (tmpParams.tcp_params != NULL)
+
+    if (tmpParams->tcp_params != NULL) printf("TCP params not found");
+    else
+    {
+        /*networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));
+        networkParams->tcp_params->listen_socket_units = tmpParams.tcp_params->listen_socket_units;
+        if (tmpParams.tcp_params->listen_socket_params != NULL)
+        {
+            networkParams->tcp_params->listen_socket_params = (SOCKETPARAMS*)(malloc(sizeof(SOCKETPARAMS) * networkParams->tcp_params->listen_socket_units));
+            memcpy(networkParams->tcp_params->listen_socket_params, tmpParams.tcp_params->listen_socket_params, (sizeof(SOCKETPARAMS) * networkParams->tcp_params->listen_socket_units));
+        }
+
+        networkParams->tcp_params->accept_socket_units = tmpParams.tcp_params->accept_socket_units;
+        if (tmpParams.tcp_params->accept_socket_params != NULL)
+        {
+            networkParams->tcp_params->accept_socket_params = (SOCKETPARAMS*)(malloc(sizeof(SOCKETPARAMS) * networkParams->tcp_params->accept_socket_units));
+            memcpy(networkParams->tcp_params->accept_socket_params, tmpParams.tcp_params->accept_socket_params, (sizeof(SOCKETPARAMS) * networkParams->tcp_params->accept_socket_units));
+        }
+
+        if (networkParams->tcp_params->accept_socket_contexts != NULL)
+        {
+            networkParams->tcp_params->accept_socket_contexts = (char*)(malloc(networkParams->tcp_params->accept_socket_units));
+            memcpy(networkParams->tcp_params->accept_socket_contexts, tmpParams.tcp_params->accept_socket_contexts, networkParams->tcp_params->accept_socket_units);
+        }*/
+        networkParams = tmpParams;
+        networkParams->tcp_params->Format();
+    }
+    if (tmpParams->tcp_params != NULL) printf("UDP params not found");
+    else
+    {
+        // When UDP is supported
+    }
+    //free(inputDataMemoryChunk);
 
 __________________________________________________________________________________________________________________________
 # Nikola
