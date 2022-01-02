@@ -265,7 +265,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
     FD_ZERO(&read_set);
     FD_ZERO(&exc_set);
     if (ioctlsocket(*params.listen_socket_params->socket, FIONBIO, &mode) == 0)    // Try add listen socket
-        FD_SET(*params.listen_socket_params->socket, &read_set);                  // If Yes add him to the set
+        FD_SET(*(params.listen_socket_params->socket), &read_set);                   // If Yes add him to the set
     else
     {
         closesocket(*params.listen_socket_params->socket);                         // If not stop executing
@@ -291,7 +291,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
     timeVal.tv_sec = REQUEST_ACQUISITION_INTERVAL_SECS;
     timeVal.tv_usec = 0;
 
-    int clientsAccepted = 0;
+    int clientsAccepted = 0; 
     SETUP_MSG msg;
     msg.msg_code = SERVICES_ENL;
     msg.content_size = (MAX_SERVICE_NAME_SIZE + 1) * MAX_ACCEPT_SOCKETS + (MAX_ACCEPT_SOCKETS - 1) + 1;
@@ -342,8 +342,24 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                         {
                             SERVICE_NAME* new_names = (SERVICE_NAME*)malloc(sizeof(SERVICE_NAME));
                             HandleDeltaServices(app_data, params.service_names, new_names);
-                            // START THREADS AND INITIALIZE BUFFERS
-
+                            #pragma omp atomic capture
+                            {
+                                EnterCriticalSection(&disp);
+                                printf("[THREAD LST/RECV] Delta services:\n");
+                                new_names->PrintOut(new_names);
+                                printf("\n\n");
+                                printf("[THREAD LST/RECV] Creating delta buffers..\n\n");
+                                LeaveCriticalSection(&disp);
+                                // Create delta buffers
+                                EnterCriticalSection(&disp);
+                                printf("[THREAD LST/RECV] Creating delta threads..\n\n");
+                                LeaveCriticalSection(&disp);
+                                // Start threads
+                                EnterCriticalSection(&disp);
+                                printf("[THREAD LST/RECV] Delta threads created\n\n");
+                                LeaveCriticalSection(&disp);
+                            }              
+                            
                             free(new_names);
                             break; 
                         }
@@ -524,7 +540,6 @@ DWORD WINAPI OutputHandleThr(LPVOID lpParam)
 
 DWORD WINAPI ClientReqHandleThr(LPVOID lpParam)
 {
-
     CLIENT_THR_PARAMS params = *((CLIENT_THR_PARAMS*)lpParam);
     EnterCriticalSection(&disp);
     printf("[THREAD %s CLIENT]:\n\tThread started\n\n", params.service_name);
@@ -574,7 +589,7 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
         EnterCriticalSection(&disp);
         printf("[EXPOSE]:\n\tSending services offer to: %s:%hu\n\n", ip_formatted, targetParams->port);
         LeaveCriticalSection(&disp);
-        if (connect(*outService->socket, (SOCKADDR*)(outService->address), sizeof(outService->address)) == SOCKET_ERROR)
+        if (connect(*outService->socket, (SOCKADDR*)(outService->address), sizeof(*outService->address)) == SOCKET_ERROR)
         {
             EnterCriticalSection(&disp);
             printf("[EXPOSE]:\n\tContacting %s:%hu failed\n\n", ip_formatted, targetParams->port);
@@ -586,6 +601,7 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
             free(outService);
             return false;
         }
+        else sub = outService;
     }
     else // Was contacted (free old description)
     {
@@ -593,13 +609,12 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
         free(outService->address);
         free(outService->socket);
         free(outService);
-        outService = sub;
     }
 
-    if (send(*outService->socket, msg.content, (int)(msg.content_size), 0) != SOCKET_ERROR)
+    if (send(*sub->socket, msg.content, strlen(msg.content)+1, 0) != SOCKET_ERROR)
     {
         EnterCriticalSection(&disp);
-        printf("[EXPOSE]:\n\tServices offer sent to %s:%hu\n\n", ip_formatted, targetParams->port);
+        printf("[EXPOSE]:\n\tServices offer sent to %s:%hu\n\n", inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
         LeaveCriticalSection(&disp);
         if (event_flag) // Wasn't contacted - add all services
         {
@@ -620,7 +635,7 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
                 else if (loc_in == MAX_SERVICES_HOSTED)
                 {
                     EnterCriticalSection(&disp);
-                    printf("[EXPOSE]:\n\tMaximum subscriptions for %s:%hu reached, abored ones:\n",ip_formatted, targetParams->port);
+                    printf("[EXPOSE]:\n\tMaximum subscriptions for %s:%hu reached, abored ones:\n", inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
                     for (loc_in; loc < service_names->Count(service_names); ++loc)    // Continue iterating trough hosted services
                         printf("\t%s\n", service_names->At(loc, service_names)->name);
                     printf("\n");
@@ -634,12 +649,12 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
     else //Send failed close socket and remove from list
     {
         EnterCriticalSection(&disp);
-        printf("[EXPOSE]:\n\tSending services offer to %s:%hu client failed\n\n");
+        printf("[EXPOSE]:\n\tSending services offer to %s:%hu client failed\n\n", inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
         LeaveCriticalSection(&disp);
-        closesocket(*outService->socket);
-        *outService->socket = INVALID_SOCKET;
-        subscriebers->RemoveByRef(outService, &subscriebers);//Disposes address and socket
-        free(outService);
+        closesocket(*sub->socket);
+        *sub->socket = INVALID_SOCKET;
+        subscriebers->RemoveByRef(sub, &subscriebers);//Disposes address and socket
+        free(sub);
         return false;
     }
 }
@@ -685,11 +700,11 @@ int main()
         case true:
         {
             // Read Network setup
-            printf("Loading network data...");
+            printf("Loading network data...\n");
             char cwd[FILENAME_MAX];
             if (getcwd(cwd, sizeof(cwd)) == NULL)
             {
-                printf("Error loading path");
+                printf("Error loading path\n");
                 return 1;
             }
 
@@ -700,18 +715,18 @@ int main()
             fopen_s(&fptr, cwd, "rb");
             if (!fptr)
             {
-                printf("Opening NetCfg failed, closing..\n");
+                printf("Opening NetCfg at %s failed, closing..\n", cwd);
                 break;
             }
 
             networkParams = (NETWORKING_PARAMS*)malloc(sizeof(NETWORKING_PARAMS));
             if (networkParams == NULL) break;
             networkParams->Initialize();
-
-            char* inputDataMemoryChunk = (char*)malloc(MAX_MEDIATOR_BUFF_SIZE);
-            NETWORKING_PARAMS tmpNetworkParams = LoadNetworkingParams(inputDataMemoryChunk, &fptr);
+              
+            NETWORKING_PARAMS tmpNetworkParams = LoadNetworkingParams(&fptr);
             fclose(fptr);
-            printf("Done.\n");
+            printf("\nDone.\n");
+            printf("==================================================================================================\n");
 
             // Check minimal req
             bool listenFound = false, bufferingFound = false,  serviceFound= false;
@@ -723,6 +738,7 @@ int main()
                     case SERVICING: {serviceFound = true; break; }
                 }
             }
+
             if (tmpNetworkParams.tcp_params->listen_socket_params != NULL) listenFound = true;
 
             if (!(listenFound && serviceFound && bufferingFound))
@@ -731,9 +747,60 @@ int main()
                 if (!listenFound)   printf("\tListen socket not found\n");
                 if (!serviceFound)  printf("\tService socket not found\n");
                 if (!bufferingFound) printf("\tBuffering socket not found\n");
+                printf("NOTE: Check port numbers usage!\n");
+                printf("--------- PRELIMINARY DATA ---------\n");
+                tmpNetworkParams.tcp_params->Format();
+                printf("--------------------_---------------\n");
                 break;
             }
 
+
+            // For each LS unit
+            for (int chk_loc = 0; chk_loc < tmpNetworkParams.tcp_params->listen_socket_units; ++chk_loc)        // For each LS unit
+            {
+                // Compare with other LS units
+                for (int chk_ls = 0; chk_ls < tmpNetworkParams.tcp_params->listen_socket_units; ++chk_ls)       
+                {
+                    if (chk_loc != chk_ls &&
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_loc].address_ipv4 == tmpNetworkParams.tcp_params->listen_socket_params[chk_ls].address_ipv4 &&
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_loc].port == tmpNetworkParams.tcp_params->listen_socket_params[chk_ls].port)
+                            { printf("NetworkCfg corrupted with duplicates!"); break;}
+                }
+
+                // Compare with AS units
+                for (int chk_as = 0; chk_as < tmpNetworkParams.tcp_params->accept_socket_units; ++chk_as)       
+                {   
+                    if (chk_loc != chk_as &&
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_loc].address_ipv4 == 
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as].address_ipv4 &&
+
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_loc].port ==
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as].port)
+                    {
+                        printf("NetworkCfg corrupted with duplicates!"); break;
+                    }
+                }
+            }
+
+            // For ach AS unit
+            for (int chk_as = 0; chk_as < tmpNetworkParams.tcp_params->accept_socket_units; ++chk_as)
+            {
+                // Compare AS unit with other AS units
+                for (int chk_as_in = 0; chk_as_in < tmpNetworkParams.tcp_params->accept_socket_units; ++chk_as_in)
+                {
+                    if (chk_as != chk_as &&
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as_in].address_ipv4 ==
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as].address_ipv4 &&
+
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as_in].port ==
+                        tmpNetworkParams.tcp_params->listen_socket_params[chk_as].port)
+                    {
+                        printf("NetworkCfg corrupted with duplicates!"); break;
+                    }
+                }
+            }
+            // Ignore UDP because it's not suppored at the moment
+                  
             // Manually copy, realloc would mess pointers up
             if (tmpNetworkParams.udp_params != NULL)
             {
@@ -782,14 +849,14 @@ int main()
                 }
 
             }
-            free(inputDataMemoryChunk);
+            tmpNetworkParams.Dispose();
 
             //Load buffers configuration
             bool successFlag = false;
-            printf("Loading memory data...\n");
+            printf("Loading memory data...\n\n");
             if (getcwd(cwd, sizeof(cwd)) == NULL) 
             {
-                printf("Error loading path");
+                printf("Error loading path\n");
                 return 1;
             }
 
@@ -801,13 +868,14 @@ int main()
             fopen_s(&fptr, cwd, "rb");
             if (!fptr)
             {
-                printf("Opening MemCfg failed, closing..\n");
+                printf("Opening MemCfg at %s failed, closing..\n", cwd);
                 break;
             }
             BUFF_PARAMS buffParams = LoadBufferParams(&fptr, &successFlag);
             if (!buffParams.Validate()) break;
             fclose(fptr);
-            printf("Done.\n");
+            printf("\nDone.\n");
+            printf("==================================================================================================\n");
 
             // Initialize input buffer
             BUFF_DESC* tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
@@ -1037,7 +1105,7 @@ int main()
                 if ((*(client_socket->socket) = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
                 {
                     EnterCriticalSection(&disp);
-                    printf("Ann error occurred creating client buffering socket\n");
+                    printf("An error occurred creating client buffering socket\n");
                     LeaveCriticalSection(&disp);
                 }
                 else ++validClientsSockets;
@@ -1166,42 +1234,29 @@ int main()
     // Dispose after break 
     WSACleanup();
 
-    if (networkParams           != NULL)  free(networkParams);
-    if (input_buffer            != NULL)  free(input_buffer);
-    if (ack_buffer              != NULL)  free(ack_buffer);
-    if (service_buffers_in      != NULL)  free(service_buffers_in);
-    if (service_buffers_out     != NULL)  free(service_buffers_out);
-    if (service_names           != NULL)  free(service_names);
-    if (listen_socket_params    != NULL)  free(listen_socket_params);
-    if (service_socket_params   != NULL)  free(service_socket_params);
-    if (client_socket_params    != NULL)  free(client_socket_params);
-    if (listenSocketHandles != NULL)
-        { listenSocketHandles->Dispose(); free(listenSocketHandles);}
-    if (inputSocketHandle != NULL)
-        {inputSocketHandle->Dispose();    free(inputSocketHandle);}
-    if (outputSocketHandle != NULL)
-        {outputSocketHandle->Dispose();   free(outputSocketHandle);}
-    if (loaderHandle != NULL)               
-        { loaderHandle->Dispose();        free(loaderHandle); }
-    if (GCHandle != NULL) 
-        { GCHandle->Dispose();            free(GCHandle); }
-    if (clientReqHandle != NULL)
-        {clientReqHandle->Dispose();      free(clientReqHandle);}
-    if (threadIDs               != NULL)  free(threadIDs);
-    if (subscriebers != NULL)
-        {subscriebers->Dispose();         free(subscriebers);}
+    if (subscriebers            != NULL) { subscriebers->Dispose();              free(subscriebers);           subscriebers          = NULL;}
+    if (networkParams           != NULL) { networkParams->Dispose();             free(networkParams);          networkParams         = NULL;}
+    if (input_buffer            != NULL) { input_buffer->Dispose();              free(input_buffer);           input_buffer          = NULL;}
+    if (ack_buffer              != NULL) { ack_buffer->Dispose();                free(ack_buffer);             ack_buffer            = NULL;}
+    if (service_buffers_in      != NULL) { service_buffers_in->Dispose();        free(service_buffers_in);     service_buffers_in    = NULL;}
+    if (service_buffers_out     != NULL) { service_buffers_out->Dispose();       free(service_buffers_out);    service_buffers_out   = NULL;}
+    if (service_names           != NULL) { service_names->Dispose();             free(service_names);          service_names         = NULL;}
+    if (listen_socket_params    != NULL) { listen_socket_params->Dispose();      free(listen_socket_params);   listen_socket_params  = NULL;}
+    if (service_socket_params   != NULL) { service_socket_params->Dispose();     free(service_socket_params);  service_socket_params = NULL;}
+    if (client_socket_params    != NULL) { client_socket_params->Dispose();      free(client_socket_params);   client_socket_params  = NULL;}
+    if (subscriebers            != NULL) { subscriebers->Dispose();              free(subscriebers);           subscriebers          = NULL;}
+    if (service_buffers_in      != NULL) { service_buffers_in->Dispose();        free(service_buffers_in);     service_buffers_in    = NULL;}
+    if (listen_socket_params    != NULL) { listen_socket_params->Dispose();      free(listen_socket_params);   listen_socket_params  = NULL;}
+    if (listen_socket_params    != NULL) { listen_socket_params->Dispose();      free(listen_socket_params);   listen_socket_params  = NULL;}
+    if (ack_buffer              != NULL) { ack_buffer->Dispose();                free(ack_buffer);             ack_buffer            = NULL;}
+    if (listenSocketHandles     != NULL) { listenSocketHandles->Dispose();       free(listenSocketHandles);    listenSocketHandles   = NULL;}
+    if (inputSocketHandle       != NULL) { inputSocketHandle->Dispose();         free(inputSocketHandle);      inputSocketHandle     = NULL;}
+    if (outputSocketHandle      != NULL) { outputSocketHandle->Dispose();        free(outputSocketHandle);     outputSocketHandle    = NULL;}
+    if (loaderHandle            != NULL) { loaderHandle->Dispose();              free(loaderHandle);           loaderHandle          = NULL;}
+    if (GCHandle                != NULL) { GCHandle->Dispose();                  free(GCHandle);               GCHandle              = NULL;}
+    if (clientReqHandle         != NULL) {clientReqHandle->Dispose();            free(clientReqHandle);        clientReqHandle       = NULL;}
+    if (threadIDs               != NULL) {                                       free(threadIDs);              threadIDs             = NULL;}
 
-    subscriebers                != NULL ? subscriebers->Dispose()           : true;
-    networkParams               != NULL ? networkParams->Dispose()          : true;
-    input_buffer                != NULL ? input_buffer->Dispose()           : true;
-    ack_buffer                  != NULL ? ack_buffer->Dispose()             : true;
-    service_buffers_in          != NULL ? service_buffers_in->Dispose()     : true;
-    service_buffers_out         != NULL ? service_buffers_out->Dispose()    : true;
-    service_names               != NULL ? service_names->Dispose()          : true;
-
-    listen_socket_params        != NULL ? listen_socket_params->Dispose()   : true;
-    service_socket_params       != NULL ? service_socket_params->Dispose()  : true;
-    client_socket_params        != NULL ? client_socket_params->Dispose()   : true;
 
     return 0;
 }

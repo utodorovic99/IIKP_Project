@@ -1,0 +1,7 @@
+  %BUFFDEF:
+  {
+		$ INQUEUE:   	500 $
+		$ ACKQUEUE:  	250 $
+		$ SERVICEIN: 	500 $
+		$ SERVICEOUT: 	500 $
+  }

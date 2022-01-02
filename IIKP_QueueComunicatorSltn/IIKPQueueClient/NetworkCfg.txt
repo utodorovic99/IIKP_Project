@@ -1,4 +1,5 @@
 #Legend:
+					>> CONFIG FOR PRIME SERVICE <<
 	%PROTOCOL "PROTOCOL_NAME":
 	{
 		Inside protocol section define each socket group as:	$ IP_ADDRESS|PORT1, PORT2,PORT3...|CONTEXTCODE $
@@ -24,7 +25,7 @@
 
   %PROTOCOL "TCP":
   {
-		$ LH|49190|0 $
-		$ 192.168.40.216|49163, 49164, 49165|1 $
-		$ 192.168.40.216|49170|3 $
+		$ LH|49170|0 $
+		$ LH|49166, 49167, 49168|1 $
+		$ LH|49190|3 $
   }%

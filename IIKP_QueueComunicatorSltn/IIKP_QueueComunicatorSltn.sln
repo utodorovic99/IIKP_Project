@@ -6,9 +6,6 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IIKPQueueClient", "IIKPQueueClient\IIKPQueueClient.vcxproj", "{3A15EE65-E7A6-4B4E-BF05-C251C15BDD2B}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A959B141-2989-4046-95B6-1EC8083126F7}"
-	ProjectSection(SolutionItems) = preProject
-		Release\NetworkCfg.txt = Release\NetworkCfg.txt
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

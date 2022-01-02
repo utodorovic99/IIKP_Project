@@ -51,6 +51,16 @@ typedef struct SERVICE_NAME
 		}while ((names_it = names_it->next) != NULL);
 	}
 
+	void PrintOut(SERVICE_NAME* head)
+	{
+		SERVICE_NAME* it = head;
+		while (it != NULL)
+		{
+			printf("\t%s\n", it->name);
+			it = it->next;
+		}
+	}
+
 	bool Dispose()
 	{
 		if (next == NULL) return true;
@@ -82,7 +92,7 @@ typedef struct SERVICE_NAME
 	{
 		unsigned num = 0;
 		SERVICE_NAME* it = head;
-		while (head != NULL)
+		while (it != NULL)
 		{
 			++num;
 			it = it->next;

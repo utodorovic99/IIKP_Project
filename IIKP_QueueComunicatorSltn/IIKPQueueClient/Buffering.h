@@ -166,13 +166,29 @@ typedef struct BUFF_DESC
             switch (foundType)
             {
                 case  INBUF:
-                { buffDesc->inqueue = atoi(part); break; }
+                { 
+                    buffDesc->inqueue = atoi(part); 
+                    printf("Parsed line: INBUF:\t\t%u\n", buffDesc->inqueue);
+                    break;
+                }
                 case  ACKBUF:
-                {buffDesc->ackqueue = atoi(part); break; }
+                {
+                    buffDesc->ackqueue = atoi(part); 
+                    printf("Parsed line: ACKBUFF:\t\t%u\n", buffDesc->ackqueue);
+                    break;
+                }
                 case  INBUF_SRV:
-                {buffDesc->service_in_queue = atoi(part); break; }
+                {
+                    buffDesc->service_in_queue = atoi(part); 
+                    printf("Parsed line: SERVICE_IN:\t%u\n", buffDesc->service_in_queue);
+                    break;
+                }
                 case  OUTBUF_SRV:
-                {buffDesc->service_out_queue = atoi(part); break; }
+                {
+                    buffDesc->service_out_queue = atoi(part);
+                    printf("Parsed line: SERVICE_OUT:\t%u\n", buffDesc->service_out_queue);
+                    break;
+                }
             }
         }
         *endPtr = stopLoc + 1;

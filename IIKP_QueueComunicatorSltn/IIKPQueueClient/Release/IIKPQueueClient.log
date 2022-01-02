@@ -1,9 +1,6 @@
 ﻿  IIKPQueueClient.cpp
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(637,16): warning C4473: 'printf' : not enough arguments passed for format string
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(637,16): message : placeholders and their parameters expect 2 variadic arguments, but 0 were provided
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(637,16): message : the missing variadic argument 1 is required by format string '%s'
   Generating code
-  1 of 68 functions ( 1.5%) were compiled, the rest were copied from previous compilation.
+  1 of 70 functions ( 1.4%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
     1 functions had inline decision re-evaluated but remain unchanged
   Finished generating code

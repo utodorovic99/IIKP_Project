@@ -75,7 +75,7 @@ using namespace std;
 
             for (char loc = 0; loc < port_units; ++loc)
             {
-                printf("\n%u.%u.%u.%u:%u\t- %s", 
+                printf("%u.%u.%u.%u:%u\t- %s\n", 
                     (unsigned)(((unsigned char*)(&address_ipv4))[3]),
                     (unsigned)(((unsigned char*)(&address_ipv4))[2]),
                     (unsigned)(((unsigned char*)(&address_ipv4))[1]),
@@ -134,9 +134,9 @@ using namespace std;
 
         bool Dispose()
         {
-            if (listen_socket_params != NULL)   {free(listen_socket_params);    listen_socket_params = NULL;  }
-            if (accept_socket_contexts != NULL) {free(accept_socket_contexts);  accept_socket_contexts = NULL;}
-            if (accept_socket_params != NULL)   {free(accept_socket_params);    accept_socket_params = NULL;  }
+            if (listen_socket_params   != NULL)   {free(listen_socket_params);    listen_socket_params   = NULL;  }
+            if (accept_socket_contexts != NULL)   {free(accept_socket_contexts);  accept_socket_contexts = NULL;  }
+            if (accept_socket_params   != NULL)   {free(accept_socket_params);    accept_socket_params   = NULL;  }
             return true;
         }
 
@@ -253,7 +253,7 @@ using namespace std;
     // null if file is not found or corrupted
     // void* inputDataMemoryChunk memory chunk dynamically alocated by caller
     // FILE** Config file
-    NETWORKING_PARAMS LoadNetworkingParams(char* inputDataMemoryChunk, FILE** file);
+    NETWORKING_PARAMS LoadNetworkingParams(FILE** file);
 
     // Initializes WinSock2 library
     // Returns true if succeeded, false otherwise.
@@ -539,10 +539,8 @@ using namespace std;
         return OK;
     }
 
-    NETWORKING_PARAMS LoadNetworkingParams(char* inputDataMemoryChunk, FILE** file)
+    NETWORKING_PARAMS LoadNetworkingParams(FILE** file)
     {
-
-        char* usedSectionEnd = inputDataMemoryChunk;
         NETWORKING_PARAMS networkParams;
         networkParams.Initialize();
 
@@ -711,9 +709,8 @@ using namespace std;
                         {
                             if (networkParams.tcp_params == NULL)
                             {
-                                networkParams.tcp_params = (TCPNETWORK_PARAMS*)usedSectionEnd;          // First TCP param
+                                networkParams.tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));          // First TCP param
                                 networkParams.tcp_params->Prepare();
-                                usedSectionEnd = ((char*)usedSectionEnd) + sizeof(TCPNETWORK_PARAMS);   // Allocate
                             }
                             
                             int start, stop=-1;
@@ -791,15 +788,13 @@ using namespace std;
 
                                                 SOCKET_GROUP_PARAMS acceptParams;
                                                 acceptParams.Prepare();
-                                                acceptParams.ports = (unsigned short*)usedSectionEnd;               
-                                                usedSectionEnd = ((char*)usedSectionEnd) + MAX_PORTS_PER_RECORD *2;        // Allocate
+                                                acceptParams.ports = (unsigned short*)malloc(MAX_PORTS_PER_RECORD * 2);
 
                                                 if (ParseTCPDefRecord(buff_it, strlen(buff_it), &acceptParams, &lineLoc) != OK) return networkParams;
 
-
-                                                if (acceptParams.ports != NULL && acceptParams.port_units < MAX_PORTS_PER_RECORD)
-                                                    usedSectionEnd = ((char*)usedSectionEnd) - ((MAX_PORTS_PER_RECORD - acceptParams.port_units) * 2);    // Free extra               
-
+                                                printf("\n");
+                                                printf("Parsed line:\n");
+                                                acceptParams.Format();
                                                 switch (acceptParams.context_code)
                                                 {
                                                     case 0: // It is a listen socket group
@@ -807,10 +802,7 @@ using namespace std;
                                                         networkParams.tcp_params->listen_socket_units = acceptParams.port_units;   // How many sockets
                                                         if (networkParams.tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
                                                         {
-                                                            networkParams.tcp_params->listen_socket_params = (SOCKETPARAMS*)usedSectionEnd;
-
-                                                            usedSectionEnd = ((char*)usedSectionEnd + acceptParams.port_units * sizeof(SOCKETPARAMS));
-                                                               
+                                                            networkParams.tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* acceptParams.port_units);      
                                                             for (int loc = 0; loc < acceptParams.port_units; ++loc)
                                                             {
                                                                 if (acceptParams.address_ipv4 != NULL && 
@@ -834,14 +826,12 @@ using namespace std;
                                                         networkParams.tcp_params->accept_socket_units = totalAcceptSocketsFound;
                                                         if (networkParams.tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
                                                         {
-                                                            networkParams.tcp_params->accept_socket_contexts = (unsigned char*)usedSectionEnd;
-                                                            usedSectionEnd = ((char*)usedSectionEnd) + MAX_ACCEPT_SOCKETS;
+                                                            networkParams.tcp_params->accept_socket_contexts = (unsigned char*)malloc(MAX_ACCEPT_SOCKETS * 2);
                                                         }                                                         
 
                                                         if (networkParams.tcp_params->accept_socket_params == NULL)
                                                         {
-                                                            networkParams.tcp_params->accept_socket_params = (SOCKETPARAMS*)usedSectionEnd;
-                                                            usedSectionEnd = ((char*)usedSectionEnd) + acceptParams.port_units * sizeof(SOCKETPARAMS);
+                                                            networkParams.tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* acceptParams.port_units);
                                                         }                                                  
 
                                                         for (int loc = totalAcceptSocketsFound - acceptParams.port_units, innerLoc=0; loc < totalAcceptSocketsFound; ++loc, ++innerLoc)
