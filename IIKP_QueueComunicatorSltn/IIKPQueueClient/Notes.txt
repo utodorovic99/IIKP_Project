@@ -13,6 +13,7 @@ ________________________________________________________________________________
 // Eliminisi nedosupne klase IP adresa
 // alllocate chunk provjeravaj da ne predjes
 // provjeri da li je malloc vratio null
+// neke lokalne parametre za thread-ove ne pravi kao lokalne promjenjive
 __________________________________________________________________________________________________________________________
 Rucno punjenje strukture:
             /////////////////////////////MANUALLY LOADING NETWORK PARAMS//////////////////////////////////////////////////

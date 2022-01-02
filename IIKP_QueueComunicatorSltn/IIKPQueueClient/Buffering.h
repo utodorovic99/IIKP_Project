@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <conio.h>
 #include "string.h"
+#include "Common.h"
 
 #include <direct.h>                               // Windows supported only
 #define GetCurrentDir _getcwd
@@ -18,7 +19,6 @@ using namespace std;
 
 #pragma region Constants
 # define ERR_BUFF_SIZE 255
-# define MAX_BUFF_NAME 30
 #pragma endregion
 
 #pragma region Globals
@@ -27,7 +27,7 @@ char QueueErrMsg[ERR_BUFF_SIZE + 1];
 
 #pragma region Data
 
-enum BUFF_TYPE { INBUF = 0, ACKBUF = 1, INBUF_SRV = 2, OUTBUF_SRV = 3, UNKNOWN = 4 };
+enum BUFF_TYPE { INBUF = 0, ACKBUF = 1, DELTABUF=2, REGISTERBUF=2, INBUF_SRV = 3, OUTBUF_SRV = 4, UNKNOWN = 5 };
 
 // Struct contains 
 typedef struct BUFF_PARAMS
@@ -36,6 +36,11 @@ typedef struct BUFF_PARAMS
 	unsigned ackqueue;
 	unsigned service_in_queue;
 	unsigned service_out_queue;
+
+    bool Validate()
+    {
+        return 	(inqueue >0) && (ackqueue > 0) && (service_in_queue > 0) && (service_out_queue);
+    }
 }BUFF_PARAMS;
 
 typedef struct BUFF_DESC
@@ -46,24 +51,71 @@ typedef struct BUFF_DESC
 	char* memory;
 	unsigned start;
 	unsigned stop;
+    BUFF_DESC* next;
 
-	void Prepare()
-	{
-		memory = NULL;
-	}
+    BUFF_DESC* FindByName(const char* name, BUFF_DESC* head)
+    {
+        BUFF_DESC* buff_it = head;
+        while (buff_it != NULL)
+        {
+            if (!strcmp(buff_it->name, name))
+                return buff_it;
 
-	void Dispose()
-	{
-		if (memory != NULL) free(memory);
-	}
+            buff_it = buff_it->next;
+        }
+        return NULL;
+    }
 
 	void Initialize()
+	{
+		memory = NULL;
+        next = NULL;
+	}
+
+	bool Dispose()
+	{
+        if (next == NULL) return true;
+        else 
+        { 
+            next->Dispose();
+            free(next);
+            free(memory);
+            next = NULL;
+            memory = NULL;
+            return true;
+        }
+	}
+
+	void Prepare()
 	{
 		memset(memory, 0, capacity);
 		memset(name, 0, MAX_BUFF_NAME + 1);
 		start = 0;
 		stop = 0;
 	}
+
+    void Insert(BUFF_DESC* newEl, BUFF_DESC* head)
+    {
+        if (head == NULL)
+            {head = newEl; return;}
+        BUFF_DESC* freeLoc = head;
+        while (freeLoc->next != NULL) freeLoc = freeLoc->next;
+
+        freeLoc->next = newEl;
+    }
+
+    BUFF_DESC* SkipElems(int elemsNum)
+    {
+        BUFF_DESC* buff_it = next;
+        elemsNum--;
+
+        if (elemsNum > 0) 
+            do
+                {buff_it = next->next;}
+            while (elemsNum > 0);
+       
+        return buff_it;
+    }
 
 }BUFF_DESC;
 #pragma endregion
@@ -123,6 +175,7 @@ typedef struct BUFF_DESC
                 {buffDesc->service_out_queue = atoi(part); break; }
             }
         }
+        *endPtr = stopLoc + 1;
         return foundType;
     }
 
@@ -309,5 +362,3 @@ typedef struct BUFF_DESC
         return buffParams;
 	}
 #pragma endregion
-
-// Parsiranje fajla koji odredjuje duzine bafera

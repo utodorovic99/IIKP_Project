@@ -1,0 +1,30 @@
+#Legend:
+	%PROTOCOL "PROTOCOL_NAME":
+	{
+		Inside protocol section define each socket group as:	$ IP_ADDRESS|PORT1, PORT2,PORT3...|CONTEXTCODE $
+		 IP_ADDRESS:
+					- A  for any
+					- LH for localhost
+					- 192.168.1.254 for concrete address (example)
+
+		 CONTEXTCODE:
+					- 0 for listen socket (only inside TCP section)
+					- 1 for buffering service (client to service)
+					- 3 for service to service communication (target)
+
+		 Example:		$ 192.168.1.254|27016|0 $			-> Listening socket on 192.168.1.254:27016
+						$ 192.168.1.254|27017, 27018, 27019|1 $		-> Accept sockets on   192.168.1.254:27017
+										           		       192.168.1.254:27018
+										    			       192.168.1.254:27019
+											   Hosting buffering service
+	}%		
+
+	NOTE: ONLY 8 sockets per record are allowedd
+#
+
+  %PROTOCOL "TCP":
+  {
+		$ LH|49190|0 $
+		$ 192.168.40.216|49163, 49164, 49165|1 $
+		$ 192.168.40.216|49170|3 $
+  }%

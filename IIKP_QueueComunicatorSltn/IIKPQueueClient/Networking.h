@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <conio.h>
 #include "string.h"
+#include "Common.h"
 
 #include <direct.h>                               // Windows supported only
 #define GetCurrentDir _getcwd
@@ -24,6 +25,7 @@ using namespace std;
 #pragma region Constants
     #define MAX_PORTS_PER_RECORD 8
     #define MAX_RECORD_LENGTH   255
+    #define MAX_ACCEPT_SOCKETS  20
 #pragma endregion
 
 #pragma region Globals
@@ -49,27 +51,31 @@ using namespace std;
             ports = NULL;
         }
 
-        void Dispose()
+        bool Dispose()
         {
-            if (ports != NULL)free(ports);
+            if (ports != NULL) { free(ports); ports = NULL; }
+            return true;
         }
 
         //Do free when done using
         void Format()
         {
 
-            char contextStr[20];
-            memset(contextStr, 0, 20);
+            char contextStr[30];
+            memset(contextStr, 0, 30);
 
             switch (context_code)
             {
                 case 0: {sprintf_s(contextStr,"Listen Socket\0");  break; }
                 case 1: {sprintf_s(contextStr, "Buffering Socket\0"); break; }
+                case 2: {sprintf_s(contextStr, "Register Socket\0"); break; }
+                case 3: {sprintf_s(contextStr, "Servicing Socket (source)\0"); break; }
+                case 4: {sprintf_s(contextStr, "Servicing Socket (target)\0"); break; }
             }
 
             for (char loc = 0; loc < port_units; ++loc)
             {
-                printf("\n%u.%u.%u.%u:%u - %s", 
+                printf("\n%u.%u.%u.%u:%u\t- %s", 
                     (unsigned)(((unsigned char*)(&address_ipv4))[3]),
                     (unsigned)(((unsigned char*)(&address_ipv4))[2]),
                     (unsigned)(((unsigned char*)(&address_ipv4))[1]),
@@ -87,7 +93,19 @@ using namespace std;
     typedef struct SOCKET_PARAMS
     {
         unsigned short port;                      
-        unsigned address_ipv4;                                                 
+        unsigned address_ipv4;      
+
+        void FormatIP(char* buff)
+        {
+            memset(buff, 0, 13);
+            sprintf(buff,
+                "%u.%u.%u.%u\0",
+                (unsigned)(((unsigned char*)(&address_ipv4))[3]),
+                (unsigned)(((unsigned char*)(&address_ipv4))[2]),
+                (unsigned)(((unsigned char*)(&address_ipv4))[1]),
+                (unsigned)(((unsigned char*)(&address_ipv4))[0]));
+        }
+
     } SOCKETPARAMS;
 
     // Represents TCP network parameters, null if protocol not supported:
@@ -110,13 +128,16 @@ using namespace std;
             listen_socket_params = NULL;
             accept_socket_params = NULL;
             accept_socket_contexts = NULL;
+            accept_socket_units=0;
+            listen_socket_units = 0;
         }
 
-        void Dispose()
+        bool Dispose()
         {
-            if(listen_socket_params != NULL)    free(listen_socket_params);
-            if (accept_socket_contexts != NULL) free(accept_socket_contexts);
-            if (accept_socket_params != NULL)   free(accept_socket_params);
+            if (listen_socket_params != NULL)   {free(listen_socket_params);    listen_socket_params = NULL;  }
+            if (accept_socket_contexts != NULL) {free(accept_socket_contexts);  accept_socket_contexts = NULL;}
+            if (accept_socket_params != NULL)   {free(accept_socket_params);    accept_socket_params = NULL;  }
+            return true;
         }
 
         void Format()
@@ -139,8 +160,8 @@ using namespace std;
 
             if (accept_socket_units > 0)
             {
-                char contextStr[20];
-                memset(contextStr, 0, 20);
+                char contextStr[30];
+                memset(contextStr, 0, 30);
 
                 printf("\n");
                 printf("Total accept socket units:\t%hu\n", accept_socket_units);
@@ -148,9 +169,14 @@ using namespace std;
                 {
                     switch (accept_socket_contexts[loc])
                     {
+                        case 0: {sprintf_s(contextStr, "Listen Socket\0");  break; }
                         case 1: {sprintf_s(contextStr, "Buffering Socket\0"); break; }
+                        case 2: {sprintf_s(contextStr, "Register Socket\0"); break; }
+                        case 3: {sprintf_s(contextStr, "Servicing Socket (source)\0"); break; }
+                        case 4: {sprintf_s(contextStr, "Servicing Socket (target)\0"); break; }
                     }
-                    printf("\t%u.%u.%u.%u:%u\t- %s\n",
+
+                    printf("\t%u.%u.%u.%u:%u   \t- %s\n",
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[3]),
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[2]),
                         (unsigned)(((unsigned char*)(&((accept_socket_params[loc]).address_ipv4)))[1]),
@@ -184,10 +210,11 @@ using namespace std;
             accept_socket_contexts = NULL;
         }
 
-        void Dispose()
+        bool Dispose()
         {
-            if (accept_socket_params != NULL)free(accept_socket_params);
-            if (accept_socket_params != NULL)free(accept_socket_params);
+            if (accept_socket_params != NULL)   { free(accept_socket_params);    accept_socket_params = NULL;   }
+            if (accept_socket_contexts != NULL) { free(accept_socket_contexts);  accept_socket_contexts = NULL; }
+            return true;
         }
     } UDPNETWORK_PARAMS;
 
@@ -199,21 +226,23 @@ using namespace std;
         TCPNETWORK_PARAMS* tcp_params;            
         UDPNETWORK_PARAMS* udp_params; 
 
-        void Prepare()
+        void Initialize()
         {
             tcp_params = NULL;
             udp_params = NULL;
         }
 
-        void Dispose()
+        bool Dispose()
         {
-            if (tcp_params != NULL) { tcp_params->Dispose();  free(tcp_params); }
-            if (udp_params != NULL) { udp_params->Dispose();  free(udp_params); }
+            if (tcp_params != NULL) { tcp_params->Dispose();  free(tcp_params); tcp_params = NULL; }
+            if (udp_params != NULL) { udp_params->Dispose();  free(udp_params); udp_params = NULL;}
+            return true;
         }
     } NETWORKING_PARAMS;
 
     // Indicates status of try-parsed socket record in NetCfg.txt
     enum  SocketRecordParseErrCode { OK = 0, NO_IP, BAD_IP, NO_PORTS, BAD_PORTS, NO_SERVICE, BAD_SERVICE, BAD_SYNTAX, NO_OP_TAG, NO_CLS_TAG, NULL_PARAM_DETECTED, ADAPTER_ERR };
+    enum  ServiceCode { LISTENING = 0, BUFFERING = 1, SERVICING=3};
     
 #pragma endregion
 
@@ -478,7 +507,7 @@ using namespace std;
         if (byteLoc >= length) return BAD_SYNTAX;
 
         tmpService = record[byteLoc] - '0';
-        if (tmpService != 0 && tmpService != 1) return BAD_SERVICE;
+        if (tmpService < 0 || tmpService>4) return BAD_SERVICE;
 
         //Seek closing Tag
         bool stopTagFound = false;
@@ -490,13 +519,6 @@ using namespace std;
         --stopLoc;
         SkipSpacingsFront(&record[byteLoc], length, &byteLoc);
         SkipSpacingsBack(&record[byteLoc], length, &stopLoc);
-
-        for (int loc = byteLoc; loc < stopLoc; ++loc)
-        {
-            if (record[loc] != '0' && record[loc] != '1' && record[loc] != '2' && record[loc] != '3' && record[loc] != '4' &&
-                record[loc] != '5' && record[loc] != '6' && record[loc] != '7' && record[loc] != '8' && record[loc] != '9')
-                return BAD_SERVICE;
-        }
 
         if (socketGroupParams == NULL) return NULL_PARAM_DETECTED;
         else
@@ -522,7 +544,7 @@ using namespace std;
 
         char* usedSectionEnd = inputDataMemoryChunk;
         NETWORKING_PARAMS networkParams;
-        networkParams.Prepare();
+        networkParams.Initialize();
 
         if (file == NULL || *file == NULL) return networkParams;
         FILE* fptr = *file;
@@ -536,6 +558,7 @@ using namespace std;
         bool lineProccessing = false;
         bool loadFlag = true;
         char* delimitPtr = NULL;
+        int totalAcceptSocketsFound = 0;
         while (true)                         //Read line by line 
         {
             if (loadFlag)
@@ -805,30 +828,35 @@ using namespace std;
                                                         closedTagFound = false;
                                                         continue; 
                                                     }
-                                                    case 1: // It is an accept socket
+                                                    case 1: case 2: case 3: case 4: // It is an accept socket
                                                     {
-                                                        networkParams.tcp_params->accept_socket_units = acceptParams.port_units;
+                                                        totalAcceptSocketsFound += acceptParams.port_units;
+                                                        networkParams.tcp_params->accept_socket_units = totalAcceptSocketsFound;
                                                         if (networkParams.tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
+                                                        {
                                                             networkParams.tcp_params->accept_socket_contexts = (unsigned char*)usedSectionEnd;
-                                                            usedSectionEnd= ((char*)usedSectionEnd) +acceptParams.port_units;
+                                                            usedSectionEnd = ((char*)usedSectionEnd) + MAX_ACCEPT_SOCKETS;
+                                                        }                                                         
 
                                                         if (networkParams.tcp_params->accept_socket_params == NULL)
                                                         {
                                                             networkParams.tcp_params->accept_socket_params = (SOCKETPARAMS*)usedSectionEnd;
                                                             usedSectionEnd = ((char*)usedSectionEnd) + acceptParams.port_units * sizeof(SOCKETPARAMS);
-                                                            for (int loc = 0; loc < acceptParams.port_units; ++loc)
+                                                        }                                                  
+
+                                                        for (int loc = totalAcceptSocketsFound - acceptParams.port_units, innerLoc=0; loc < totalAcceptSocketsFound; ++loc, ++innerLoc)
+                                                        {
+                                                            if (networkParams.tcp_params!= NULL &&
+                                                                networkParams.tcp_params->accept_socket_params!= NULL &&
+                                                                networkParams.tcp_params->accept_socket_params[loc].address_ipv4 != NULL &&
+                                                                networkParams.tcp_params->accept_socket_contexts != NULL)
                                                             {
-                                                                if (networkParams.tcp_params!= NULL &&
-                                                                    networkParams.tcp_params->accept_socket_params!= NULL &&
-                                                                    networkParams.tcp_params->accept_socket_params[loc].address_ipv4 != NULL &&
-                                                                    networkParams.tcp_params->accept_socket_contexts != NULL)
-                                                                {
-                                                                    networkParams.tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
-                                                                    networkParams.tcp_params->accept_socket_params[loc].port = acceptParams.ports[loc];
-                                                                    networkParams.tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
-                                                                }
+                                                                networkParams.tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
+                                                                networkParams.tcp_params->accept_socket_params[loc].port = acceptParams.ports[innerLoc];
+                                                                networkParams.tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
                                                             }
                                                         }
+                                                        
                                                         ++lineLoc;
                                                         openTagFound = false;
                                                         closedTagFound = false;
