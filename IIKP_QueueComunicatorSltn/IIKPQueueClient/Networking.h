@@ -253,7 +253,7 @@ using namespace std;
     // null if file is not found or corrupted
     // void* inputDataMemoryChunk memory chunk dynamically alocated by caller
     // FILE** Config file
-    NETWORKING_PARAMS LoadNetworkingParams(FILE** file);
+    void LoadNetworkingParams(FILE** file, NETWORKING_PARAMS* networkParams);
 
     // Initializes WinSock2 library
     // Returns true if succeeded, false otherwise.
@@ -539,12 +539,11 @@ using namespace std;
         return OK;
     }
 
-    NETWORKING_PARAMS LoadNetworkingParams(FILE** file)
+    void LoadNetworkingParams(FILE** file, NETWORKING_PARAMS* networkParams)
     {
-        NETWORKING_PARAMS networkParams;
-        networkParams.Initialize();
+        networkParams->Initialize();
 
-        if (file == NULL || *file == NULL) return networkParams;
+        if (file == NULL || *file == NULL) return;
         FILE* fptr = *file;
 
         char buff[MAX_RECORD_LENGTH];
@@ -560,7 +559,7 @@ using namespace std;
         while (true)                         //Read line by line 
         {
             if (loadFlag)
-                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams;
+                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return;
                 
 
             if (strstr(buff_it, "#Legend"))                            //Skip Legend section (last line)
@@ -568,7 +567,7 @@ using namespace std;
                 // Skip inner lines
                 do
                 {
-                    if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams;
+                    if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return;
 
                     clsIdx = 0;
                 }
@@ -585,7 +584,7 @@ using namespace std;
             for (clsIdx; clsIdx < MAX_RECORD_LENGTH; ++clsIdx)   // Seek in current line
             {
                 if (clsIdx == MAX_RECORD_LENGTH || buff_it[clsIdx] == '\r' || buff_it[clsIdx] == '\n') break;          // End of line, take another one
-                else if (buff_it[clsIdx] == EOF) return networkParams;            // End of file
+                else if (buff_it[clsIdx] == EOF) return;            // End of file
                 else if (buff_it[clsIdx] == '%')           
                 {
                     ++clsIdx;        
@@ -707,10 +706,10 @@ using namespace std;
 
                         if (protocolFoundID == 1) // Has TCP params
                         {
-                            if (networkParams.tcp_params == NULL)
+                            if (networkParams->tcp_params == NULL)
                             {
-                                networkParams.tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));          // First TCP param
-                                networkParams.tcp_params->Prepare();
+                                networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));          // First TCP param
+                                networkParams->tcp_params->Prepare();
                             }
                             
                             int start, stop=-1;
@@ -720,12 +719,12 @@ using namespace std;
                             {
                                 if(buff_it[loc]=='_' || buff_it[loc] == '\t')
                                     SkipSpacingsFront(&buff_it[loc], MAX_RECORD_LENGTH, &loc);
-                                if (buff_it[loc] == EOF)  return networkParams;  // Bad syntax-no closing tag
+                                if (buff_it[loc] == EOF)  return;  // Bad syntax-no closing tag
                                 if (loc >= MAX_RECORD_LENGTH || buff_it[loc] == '\r' || buff_it[loc] == '\n')    // If end line -> load new line
                                 {
                                     do
                                         if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) 
-                                            return networkParams;  
+                                            return;  
                                     while(strlen(buff_it)==0);
                                     loc = 0;
                                     SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH - loc, &loc);
@@ -740,7 +739,7 @@ using namespace std;
                                     SkipSpacingsFront(buff_it + loc, MAX_RECORD_LENGTH - loc, &loc);   // Skip body spacings
                                     if (loc >= MAX_RECORD_LENGTH || buff_it[loc] == '\r' || buff_it[loc] == '\n')    // If end line -> load new line
                                     {
-                                        if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams; 
+                                        if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return; 
                                         loc = 0;
                                         SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH - loc, &loc);
                                         loc = -1;   // Restarts loc to 0 after break;
@@ -765,7 +764,7 @@ using namespace std;
 
                                             do
                                             {
-                                                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return networkParams; 
+                                                if (!fgets(buff_it, MAX_RECORD_LENGTH, fptr)) return; 
                                                 else { lineLoc = 0; ++totalLinesFromHere; SkipSpacingsFront(buff_it, MAX_RECORD_LENGTH, &lineLoc); buff_it += lineLoc; }
                                             }while (lineLoc == MAX_RECORD_LENGTH);
          
@@ -790,7 +789,7 @@ using namespace std;
                                                 acceptParams.Prepare();
                                                 acceptParams.ports = (unsigned short*)malloc(MAX_PORTS_PER_RECORD * 2);
 
-                                                if (ParseTCPDefRecord(buff_it, strlen(buff_it), &acceptParams, &lineLoc) != OK) return networkParams;
+                                                if (ParseTCPDefRecord(buff_it, strlen(buff_it), &acceptParams, &lineLoc) != OK) return;
 
                                                 printf("\n");
                                                 printf("Parsed line:\n");
@@ -799,19 +798,17 @@ using namespace std;
                                                 {
                                                     case 0: // It is a listen socket group
                                                     {
-                                                        networkParams.tcp_params->listen_socket_units = acceptParams.port_units;   // How many sockets
-                                                        if (networkParams.tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
+                                                        networkParams->tcp_params->listen_socket_units = acceptParams.port_units;   // How many sockets
+                                                        if (networkParams->tcp_params->listen_socket_params == NULL)                // List of ther IP + PORT
                                                         {
-                                                            networkParams.tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* acceptParams.port_units);      
+                                                            networkParams->tcp_params->listen_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* acceptParams.port_units);
                                                             for (int loc = 0; loc < acceptParams.port_units; ++loc)
                                                             {
-                                                                if (acceptParams.address_ipv4 != NULL && 
-                                                                    networkParams.tcp_params != NULL &&
-                                                                    networkParams.tcp_params->listen_socket_params!= NULL &&
-                                                                    networkParams.tcp_params->listen_socket_params[loc].address_ipv4 != NULL)
+                                                                if (networkParams->tcp_params != NULL &&
+                                                                    networkParams->tcp_params->listen_socket_params!= NULL)
                                                                 {
-                                                                    networkParams.tcp_params->listen_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
-                                                                    networkParams.tcp_params->listen_socket_params[loc].port = acceptParams.ports[loc];
+                                                                    networkParams->tcp_params->listen_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
+                                                                    networkParams->tcp_params->listen_socket_params[loc].port = acceptParams.ports[loc];
                                                                 }
                                                             }
                                                         }
@@ -823,27 +820,26 @@ using namespace std;
                                                     case 1: case 2: case 3: case 4: // It is an accept socket
                                                     {
                                                         totalAcceptSocketsFound += acceptParams.port_units;
-                                                        networkParams.tcp_params->accept_socket_units = totalAcceptSocketsFound;
-                                                        if (networkParams.tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
+                                                        networkParams->tcp_params->accept_socket_units = totalAcceptSocketsFound;
+                                                        if (networkParams->tcp_params->accept_socket_contexts == NULL)  // Hosting services codes
                                                         {
-                                                            networkParams.tcp_params->accept_socket_contexts = (unsigned char*)malloc(MAX_ACCEPT_SOCKETS * 2);
+                                                            networkParams->tcp_params->accept_socket_contexts = (unsigned char*)malloc(MAX_ACCEPT_SOCKETS * 2);
                                                         }                                                         
 
-                                                        if (networkParams.tcp_params->accept_socket_params == NULL)
+                                                        if (networkParams->tcp_params->accept_socket_params == NULL)
                                                         {
-                                                            networkParams.tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* acceptParams.port_units);
+                                                            networkParams->tcp_params->accept_socket_params = (SOCKETPARAMS*)malloc(sizeof(SOCKETPARAMS)* MAX_ACCEPT_SOCKETS);
                                                         }                                                  
 
                                                         for (int loc = totalAcceptSocketsFound - acceptParams.port_units, innerLoc=0; loc < totalAcceptSocketsFound; ++loc, ++innerLoc)
                                                         {
-                                                            if (networkParams.tcp_params!= NULL &&
-                                                                networkParams.tcp_params->accept_socket_params!= NULL &&
-                                                                networkParams.tcp_params->accept_socket_params[loc].address_ipv4 != NULL &&
-                                                                networkParams.tcp_params->accept_socket_contexts != NULL)
+                                                            if (networkParams->tcp_params!= NULL &&
+                                                                networkParams->tcp_params->accept_socket_params!= NULL &&
+                                                                networkParams->tcp_params->accept_socket_contexts != NULL)
                                                             {
-                                                                networkParams.tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
-                                                                networkParams.tcp_params->accept_socket_params[loc].port = acceptParams.ports[innerLoc];
-                                                                networkParams.tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
+                                                                networkParams->tcp_params->accept_socket_params[loc].address_ipv4 = acceptParams.address_ipv4;
+                                                                networkParams->tcp_params->accept_socket_params[loc].port = acceptParams.ports[innerLoc];
+                                                                networkParams->tcp_params->accept_socket_contexts[loc] = acceptParams.context_code;
                                                             }
                                                         }
                                                         
@@ -864,7 +860,7 @@ using namespace std;
                                     }
 
                                     // Puca na free startbuff_itPtr, provjeravao sam ne oslobadjam ga nigdje ranije, nije NULL i drzi staru vrijednost sa pocetka???
-                                    if(openBodyFound==true)  return networkParams;    // No } closure
+                                    if(openBodyFound==true)  return;    // No } closure
                                     if (seekProto) break;   // Brake
                                 }
                             }
@@ -873,7 +869,7 @@ using namespace std;
                 }
             }
         }
-        return networkParams;
+        return;
     }
 
 #pragma endregion

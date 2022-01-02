@@ -723,7 +723,8 @@ int main()
             if (networkParams == NULL) break;
             networkParams->Initialize();
               
-            NETWORKING_PARAMS tmpNetworkParams = LoadNetworkingParams(&fptr);
+            NETWORKING_PARAMS tmpNetworkParams;
+            LoadNetworkingParams(&fptr, &tmpNetworkParams);
             fclose(fptr);
             printf("\nDone.\n");
             printf("==================================================================================================\n");
