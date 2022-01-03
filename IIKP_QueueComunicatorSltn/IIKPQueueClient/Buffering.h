@@ -46,7 +46,7 @@ typedef struct BUFF_PARAMS
 typedef struct BUFF_DESC
 {
 	char context;
-	char name[MAX_BUFF_NAME + 1];
+	char* name;
 	unsigned capacity;
 	char* memory;
 	unsigned start;
@@ -70,6 +70,7 @@ typedef struct BUFF_DESC
 	{
 		memory = NULL;
         next = NULL;
+        name = NULL;
 	}
 
 	bool Dispose()
@@ -80,8 +81,10 @@ typedef struct BUFF_DESC
             next->Dispose();
             free(next);
             free(memory);
+            free(name);
             next = NULL;
             memory = NULL;
+            name = NULL;
             return true;
         }
 	}
@@ -89,7 +92,6 @@ typedef struct BUFF_DESC
 	void Prepare()
 	{
 		memset(memory, 0, capacity);
-		memset(name, 0, MAX_BUFF_NAME + 1);
 		start = 0;
 		stop = 0;
 	}
@@ -115,6 +117,39 @@ typedef struct BUFF_DESC
             while (elemsNum > 0);
        
         return buff_it;
+    }
+
+    void RemoveAt(BUFF_DESC* to_del , BUFF_DESC** head)
+    {
+        if (*head == to_del)*head = to_del->next;
+        else
+        {
+            BUFF_DESC* it_prev = *head;
+            BUFF_DESC* it = (*head)->next;
+            while (it != NULL)
+            {
+                if (it == to_del)
+                {
+                    it_prev->next = it->next; break;
+                }
+
+                it_prev = it;
+                it = it->next;
+            }
+        }
+        free(name);
+        name = NULL;
+        next = NULL;
+    }
+
+    void PrintOut(BUFF_DESC* head)
+    {
+        BUFF_DESC* it = head;
+        while (it != NULL)
+        {
+            printf("\tNAME: %s\tCAPACITY:%u\n", it->name, it->capacity);
+            it = it->next;
+        }
     }
 
 }BUFF_DESC;

@@ -1,8 +1,10 @@
 ﻿  IIKPQueueClient.cpp
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(303,34): warning C4101: 'GC_handle': unreferenced local variable
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(302,34): warning C4101: 'loader_handle': unreferenced local variable
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(301,34): warning C4101: 'client_req_handle': unreferenced local variable
   Generating code
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueClient.cpp(446): warning C4715: 'ListenSocketThr': not all control paths return a value
-  3 of 68 functions ( 4.4%) were compiled, the rest were copied from previous compilation.
+  1 of 69 functions ( 1.4%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    0 functions had inline decision re-evaluated but remain unchanged
+    2 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   IIKPQueueClient.vcxproj -> C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\Release\IIKPQueueClient.exe

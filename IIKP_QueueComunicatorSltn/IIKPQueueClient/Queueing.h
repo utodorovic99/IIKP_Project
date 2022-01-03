@@ -323,17 +323,20 @@ typedef struct LISTENING_THR_PARAMS
 {
 	SOCKET_DATA* listen_socket_params;
 	OUT_SERVICE* subscriebers;
-	SERVICE_NAME* service_names;
+	SERVICE_NAME** service_names;
 	bool* end_thr_flag;
 
 	// Required for delta service init.
 	BUFF_PARAMS* buff_params;			// Could read from elems of list instead
-	BUFF_DESC* service_buffers_in;		// Input buffer  (for client)
-	BUFF_DESC* service_buffers_out;		// Output buffer (for client)
-	BUFF_DESC* input_buffer;			// Service input (for loader)
-	BUFF_DESC* ack_buffer;				// Ack buffer	 (for ack handle)
-	HANDLE_LST* client_req_handle;		// For client connections
+	BUFF_DESC** service_buffers_in;		// Input buffer  (for client)
+	BUFF_DESC** service_buffers_out;		// Output buffer (for client)
+	BUFF_DESC** input_buffer;			// Service input (for loader)
+	BUFF_DESC** ack_buffer;				// Ack buffer	 (for ack handle)
+	HANDLE_LST** client_req_handle;		// For client connections thread
+	HANDLE_LST** loader_handle;			// For loader threads
+	HANDLE_LST** GC_handle;				// For GC threads
 	DWORD* threadIDs;					// For all threads
+	SOCKET_DATA** client_socket_params;	// Clients socket
 
 	void Initialize()
 	{
@@ -348,7 +351,10 @@ typedef struct LISTENING_THR_PARAMS
 	    input_buffer		 = NULL;
 		ack_buffer			 = NULL;
 		client_req_handle	 = NULL;
+		loader_handle		 = NULL;
+		GC_handle			 = NULL;
 		threadIDs			 = NULL;
+		client_socket_params = NULL;
 	}
 
 	void Dispose()
@@ -366,16 +372,19 @@ typedef struct LISTENING_THR_PARAMS
 		}
 
 		// Common, do not dispose
-		service_names		= NULL;
-		end_thr_flag		= NULL;
+		service_names		 = NULL;
+		end_thr_flag		 = NULL;
 
-		buff_params			= NULL;
-		service_buffers_in	= NULL;
-		service_buffers_out = NULL;
-		input_buffer		= NULL;
-		ack_buffer			= NULL;
-		client_req_handle	= NULL;
-		threadIDs			= NULL;
+		buff_params			 = NULL;
+		service_buffers_in	 = NULL;
+		service_buffers_out  = NULL;
+		input_buffer		 = NULL;
+		ack_buffer			 = NULL;
+		client_req_handle	 = NULL;
+		loader_handle		 = NULL;
+		GC_handle			 = NULL;
+		threadIDs			 = NULL;
+		client_socket_params = NULL;
 	}
 
 } LISTENING_THR_PARAMS;
