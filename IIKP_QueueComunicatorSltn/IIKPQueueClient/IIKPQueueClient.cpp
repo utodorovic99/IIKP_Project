@@ -41,134 +41,11 @@
     unsigned thread_counter = 0;    // Sync-ed by dsp cs (closing thread followed by disp writing )
 #pragma endregion
 
-void PrintEthernetHeader(ethernet_header* eth)
-{
-    printf("========> ETHERNET HEADER <========\n");
-    printf("\tMAC DEST ADDR:\t%d:%d:%d:%d:%d:%d\n",
-        eth->dest_address[0], eth->dest_address[1],
-        eth->dest_address[2], eth->dest_address[3],
-        eth->dest_address[4],eth->dest_address[5]);
-
-    printf("\tSRC DEST ADDR:\t%d:%d:%d:%d:%d:%d\n",
-        eth->src_address[0], eth->src_address[1],
-        eth->src_address[2], eth->src_address[3],
-        eth->src_address[4], eth->src_address[5]);
-
-    printf("\tTYPE:\t\t\t%hu",eth->type);
-    printf("===================================\n");
-}
-
-void PrintIPHeader(ip_header* iph)
-{
-    printf("========> INTERNET HEADER <========\n");
-    printf("\tHDR LENGTH:\t%d\n",   iph->header_length);
-    printf("\tVERSION:\t\t%d\n",    iph->version);
-    printf("\tTOS:\t\t%d\n",        iph->tos);
-    printf("\tLENGTH:\t\t%hu\n",    iph->length);
-    printf("\tID:\t%hu\n",          iph->identification);
-    printf("\tFRAG_FO:\t%hu\n",     iph->fragm_fo);
-    printf("\tTTL:\t%d\n",          iph->ttl);
-    printf("\tNEXT PROTO:\t%d\n",   iph->next_protocol);
-    printf("\tCHECKSUM:\t%hu\n",    iph->checksum);
-    printf("\tSRC IP:\t%d.%d.%d.%d\n", 
-                iph->src_addr[3],   iph->src_addr[2], 
-                iph->src_addr[1],   iph->src_addr[0]);
-    printf("\tDST IP:\t%d.%d.%d.%d\n",
-                iph->dst_addr[3],   iph->dst_addr[2], 
-                iph->dst_addr[1],   iph->dst_addr[0]);
-    printf("\tOPT PADDING:\t %u\n", iph->options_padding);
-    printf("===================================\n");
-}
-
-void PrintTCPHeader(tcp_header* tcph)
-{
-    printf("===========> TCP HEADER <==========\n");
-    printf("\tSRC PORT:\t%hu\n", tcph->src_port);
-    printf("\tDST PORT:\t%hu\n", tcph->dest_port);
-    printf("\tSEQ. NUM:\t%u\n", tcph->sequence_num);
-    printf("\tSEQ. NUM:\t%u\n", tcph->ack_num);
-    printf("\tHDR LENGTH:\t%d\n", tcph->header_length);
-    printf("\tFLAGS:\t%d\n", tcph->flags);
-    printf("\tWINDOW SIZE:\t%hu\n", tcph->windows_size);
-    printf("\tCHECKSUM:\t%hu\n", tcph->checksum);
-    printf("\tURG. PTR:\t%hu\n", tcph->urgent_pointer);
-    printf("===================================\n");
-}
-
-char* ExtractAppData(char* msg, ethernet_header* eth, ip_header* iph, tcp_header* tcph)
-{
-    char* it = msg;
-    if (eth != NULL)
-    {
-        eth->src_address[5] = (unsigned char)it[0];
-        eth->src_address[4] = (unsigned char)it[1];
-        eth->src_address[3] = (unsigned char)it[2];
-        eth->src_address[2] = (unsigned char)it[3];
-        eth->src_address[1] = (unsigned char)it[4];
-        eth->src_address[0] = (unsigned char)it[5];
-
-        eth->dest_address[5] = (unsigned char)it[6];
-        eth->dest_address[4] = (unsigned char)it[7];
-        eth->dest_address[3] = (unsigned char)it[8];
-        eth->dest_address[2] = (unsigned char)it[9];
-        eth->dest_address[1] = (unsigned char)it[10];
-        eth->dest_address[0] = (unsigned char)it[11];
-
-        eth->type            = ntohs(*((unsigned short*)(it + 12)));
-    }
-    it += 14;
-
-    if (iph != NULL)
-    {
-        iph->header_length      = (unsigned char)(it[0] & 0xb00001111);
-        iph->version            = (unsigned char)((it[0] & 0xb11110000) >> 4);
-        iph->tos                = (unsigned char)it[1];
-        iph->length             = ntohs(*((unsigned short*)(it + 2)));
-        iph->identification     = ntohs(*((unsigned short*)(it + 4)));
-        iph->fragm_fo           = ntohs(*((unsigned short*)(it + 6)));
-        iph->ttl                = (unsigned char)it[7];
-        iph->next_protocol      = (unsigned char)it[8];
-        iph->checksum           = ntohs(*((unsigned short*)(it + 9)));
-
-        iph->src_addr[3]        = (unsigned char)it[11];
-        iph->src_addr[2]        = (unsigned char)it[12];
-        iph->src_addr[1]        = (unsigned char)it[13];
-        iph->src_addr[0]        = (unsigned char)it[14];
-
-        iph->dst_addr[3]        = (unsigned char)it[15];
-        iph->dst_addr[2]        = (unsigned char)it[16];
-        iph->dst_addr[1]        = (unsigned char)it[17];
-        iph->dst_addr[0]        = (unsigned char)it[18];
-
-        iph->options_padding= (int)ntohs(*((unsigned short*)(it + 19)));
-    }
-    it += ((unsigned short)(it[0] & 0xb00001111)) * 4;
-    
-    if (tcph != NULL)
-    {
-        tcph->src_port          = ntohs(*((unsigned short*)it));
-        tcph->dest_port         = ntohs(*((unsigned short*)(it+2)));
-        tcph->sequence_num      = (int)ntohl(*((unsigned short*)(it + 4)));
-        tcph->ack_num           = (int)ntohl(*((unsigned short*)(it + 8)));
-        tcph->reserved          = (unsigned char)(it[12] & 0xb00001111);
-        tcph->header_length     = (unsigned char)((it[12] & 0xb11110000) >> 4);
-        tcph->flags             = (unsigned char)it[13];
-        tcph->windows_size      = ntohs(*((unsigned short*)(it + 14)));
-        tcph->checksum          = ntohs(*((unsigned short*)(it + 16)));
-        tcph->urgent_pointer    = ntohs(*((unsigned short*)(it + 18)));
-    }
-    it += (unsigned char)((it[12] & 0xb11110000) >> 4) * 4;
-
-    return it;
-}
-
 // Handles delta services sent by other service
-void HandleDeltaServices(char* message_buff, SERVICE_NAME* service_names, SERVICE_NAME* new_services)
+void HandleDeltaServices(char* message_buff, SERVICE_NAME* service_names, SERVICE_NAME** new_services)
 {  
     // Parse message to list of service strings
-    SERVICE_NAME* recvedNames = NULL;
-    char* part = strtok(message_buff+6, "|");
-
+    char* part = strtok(message_buff, "|");
     SERVICE_NAME* tmpEl;
     while (part != NULL)
     {
@@ -181,52 +58,31 @@ void HandleDeltaServices(char* message_buff, SERVICE_NAME* service_names, SERVIC
         {
             tmpEl->Dispose();
             free(tmpEl);
+            break;
         }
-        else
-        { 
-            if (recvedNames == NULL)
-                recvedNames->Insert(tmpEl, &recvedNames);
-            else
-                recvedNames->Insert(tmpEl, &recvedNames);
-            
-        }
+        else if(!service_names->Contains(tmpEl, service_names))
+            (*new_services)->Insert(tmpEl, new_services);
+           
         part = strtok(NULL, "|");
-    }
-
-    // Detect delta names
-    tmpEl = recvedNames;
-    SERVICE_NAME* native_names_it;
-    bool match = false;
-    while (recvedNames != NULL) // For each recv-ed name
-    {
-        native_names_it = service_names;    // Check native services
-        while (native_names_it != NULL)
-        {
-            if(!strcmp(native_names_it->name, recvedNames->name))   // Not delta?
-                {match = true; break;}
-
-            native_names_it = native_names_it->next;
-        }
-
-        if (match)  // Not delta => Dispose
-        {
-            SERVICE_NAME* toDisp = recvedNames;
-            recvedNames = recvedNames->next;
-            toDisp->Dispose();    
-        }
-        else if (native_names_it != NULL)                           // Is Delta  => Keep
-        {
-            new_services->Insert(recvedNames, &native_names_it); 
-            recvedNames = recvedNames->next;
-        }
-        match = false;
-    }
-
+    } 
 }
 
 // Handles service messages from other service
 void HandleServiceMsg()
 {
+
+}
+
+void GenerateDeltaMsg(SETUP_MSG* msg, SERVICE_NAME* service_names)
+{
+    msg->Initialize();
+    msg->msg_code = SERVICES_ENL;
+    msg->content_size = (MAX_SERVICE_NAME_SIZE + 1) * MAX_ACCEPT_SOCKETS + (MAX_ACCEPT_SOCKETS - 1) + 1;
+    msg->content = (char*)malloc(msg->content_size);
+    memset(msg->content, 0, msg->content_size);
+    service_names->Format(msg->content, msg->content_size, service_names->Count(service_names), service_names);
+    msg->content[strlen(msg->content)] = '\0';
+    msg->content_size=strlen(msg->content) + 1;
 
 }
 
@@ -265,7 +121,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
     FD_ZERO(&read_set);
     FD_ZERO(&exc_set);
     if (ioctlsocket(*params.listen_socket_params->socket, FIONBIO, &mode) == 0)    // Try add listen socket
-        FD_SET(*(params.listen_socket_params->socket), &read_set);                   // If Yes add him to the set
+    {FD_SET(*(params.listen_socket_params->socket), &read_set); FD_SET(*(params.listen_socket_params->socket), &exc_set);} // If Yes add him to the set
     else
     {
         closesocket(*params.listen_socket_params->socket);                         // If not stop executing
@@ -281,7 +137,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
         return -1;
     }
     EnterCriticalSection(&disp);
-    printf("[THREAD LST/RECV]:\n\tListening at: %s:%hu\n\n", inet_ntoa(params.listen_socket_params->address->sin_addr), htons(params.listen_socket_params->address->sin_port));
+    printf("[THREAD LST/RECV]:\n\tListening at: %s:%hu\n\n", inet_ntoa(params.listen_socket_params->address->sin_addr), ntohs(params.listen_socket_params->address->sin_port));
     LeaveCriticalSection(&disp);
 
     for (OUT_SERVICE* sub = params.subscriebers; sub != NULL; sub = sub->next)     // Add all client sockets to the set
@@ -293,10 +149,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
 
     int clientsAccepted = 0; 
     SETUP_MSG msg;
-    msg.msg_code = SERVICES_ENL;
-    msg.content_size = (MAX_SERVICE_NAME_SIZE + 1) * MAX_ACCEPT_SOCKETS + (MAX_ACCEPT_SOCKETS - 1) + 1;
-    msg.content = (char*)malloc(msg.content_size);
-    params.service_names->Format(msg.content, msg.content_size, -1, params.service_names);
+    GenerateDeltaMsg(&msg, params.service_names);
 
     int iResult;
     char message_buff[MAX_MESSAGE_SIZE];
@@ -317,31 +170,26 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
             LeaveCriticalSection(&disp);
             for (OUT_SERVICE* sub = params.subscriebers; sub != NULL; sub = sub->next)
             {
-                if (FD_ISSET(sub->socket, &read_set))   // Client sent something
+                if (FD_ISSET(*sub->socket, &read_set))   // Client sent something
                 {
                     EnterCriticalSection(&disp);
-                    printf("[THREAD LST/RECV]:\n\tMessage from: %s:%hu\n\n", inet_ntoa(sub->address->sin_addr), sub->address->sin_port);
+                    printf("[THREAD LST/RECV]:\n\tMessage from: %s:%hu\n\n", inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
                     LeaveCriticalSection(&disp);
                     memset(message_buff, 0, MAX_MESSAGE_SIZE);
                     recv(*sub->socket, message_buff, MAX_MESSAGE_SIZE, 0);
 
-                    ethernet_header* eth=(ethernet_header*)malloc(sizeof(ethernet_header));
-                    ip_header* iph= (ip_header*)malloc(sizeof(ip_header));
-                    tcp_header* tcph = (tcp_header*)malloc(sizeof(tcp_header));
-                    char* app_data = ExtractAppData(message_buff, eth, iph, tcph);
-                    PrintEthernetHeader(eth);
-                    PrintIPHeader(iph);
-                    PrintTCPHeader(tcph);
-                    free(eth); 
-                    free(iph); 
-                    free(tcph);
 
-                    switch (app_data[0])
+                    switch (message_buff[0])
                     {
-                        case 0: 
+                        case SERVICES_ENL: 
                         {
-                            SERVICE_NAME* new_names = (SERVICE_NAME*)malloc(sizeof(SERVICE_NAME));
-                            HandleDeltaServices(app_data, params.service_names, new_names);
+                            SETUP_MSG recved_msg;
+                            recved_msg.Initialize();
+                            recved_msg.msg_code = *((unsigned short*)message_buff);
+                            recved_msg.content_size= *((unsigned*)(message_buff+2));
+                            recved_msg.content = message_buff + 6;
+                            SERVICE_NAME* new_names = NULL;
+                            HandleDeltaServices(recved_msg.content,params.service_names, &new_names);
                             #pragma omp atomic capture
                             {
                                 EnterCriticalSection(&disp);
@@ -354,7 +202,133 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                                 EnterCriticalSection(&disp);
                                 printf("[THREAD LST/RECV] Creating delta threads..\n\n");
                                 LeaveCriticalSection(&disp);
-                                // Start threads
+                                // Start threads                                 
+                                /*BUFF_DESC* new_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
+                                new_buff->Initialize();
+                                if (service_buffers_in == NULL) service_buffers_in = tmp_buff;
+                                else service_buffers_in->Insert(tmp_buff, &service_buffers_in);
+
+                                if ((tmp_buff->memory = (char*)malloc(buffParams.service_in_queue)) == NULL)
+                                {
+                                    escapeFlag = true;  break;
+                                }
+                                else
+                                {
+                                    tmp_buff->context = INBUF_SRV;
+                                    tmp_buff->capacity = buffParams.service_in_queue;
+                                    tmp_buff->Prepare();
+                                }
+
+                                tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
+                                tmp_buff->Initialize();
+                                if (service_buffers_out == NULL) service_buffers_out = tmp_buff;
+                                else service_buffers_out->Insert(tmp_buff, &service_buffers_out);
+
+                                if ((tmp_buff->memory = (char*)malloc(buffParams.service_out_queue)) == NULL)
+                                {
+                                    escapeFlag = true;  break;
+                                }
+                                else
+                                {
+                                    tmp_buff->context = OUTBUF_SRV;
+                                    tmp_buff->capacity = buffParams.service_out_queue;
+                                    tmp_buff->Prepare();
+                                }*/
+                                // Create loader thread
+                                //HANDLE_LST* load_handle = (HANDLE_LST*)(malloc(sizeof(HANDLE_LST)));
+                                //if (load_handle == NULL) { escapeFlag = true; break; }
+
+                                //load_handle->Initialize();
+                                //load_handle->handle = (HANDLE*)malloc(sizeof(HANDLE));
+                                //threadIDs[thread_counter] = thread_counter;
+
+                                //SERVICE_LOADER_THR_PARAMS* service_loader_thr_param = (SERVICE_LOADER_THR_PARAMS*)malloc(sizeof(SERVICE_LOADER_THR_PARAMS));
+                                //service_loader_thr_param->Initialize();
+                                //memcpy(service_loader_thr_param->service_name, service_names_it->name, strlen(service_names_it->name));
+
+                                //service_loader_thr_param->in_buffer = input_buffer;             // Reds from common input buffer            
+
+                                //memset(service_name, 0, MAX_BUFF_NAME + 1);
+                                //sprintf(service_name, "%s|SEND BUFF", service_names_it->name);  // Writes into service send buffer (Queue Service Point of View) 
+                                //service_loader_thr_param->out_buffer = service_buffers_out->FindByName(service_name, service_buffers_out);
+
+                                //service_loader_thr_param->end_thr_flag = &thr_shudown_flag;
+
+                                //*load_handle->handle = CreateThread(NULL, 0, &ServiceLoaderThr, service_loader_thr_param, 0, threadIDs + thread_counter);
+                                //listenSocketHandles->Insert(load_handle, &listenSocketHandles);
+                                //++thread_counter;
+
+                                //// Create GC thread
+                                //HANDLE_LST* GC_handle = (HANDLE_LST*)(malloc(sizeof(HANDLE_LST)));
+                                //if (GC_handle == NULL) { escapeFlag = true; break; }
+
+                                //GC_handle->Initialize();
+                                //GC_handle->handle = (HANDLE*)malloc(sizeof(HANDLE));
+                                //threadIDs[thread_counter] = thread_counter;
+
+                                //SERVICE_GC_THR_PARAMS* GC_thr_param = (SERVICE_GC_THR_PARAMS*)malloc(sizeof(SERVICE_GC_THR_PARAMS));
+                                //GC_thr_param->Initialize();
+                                //memcpy(GC_thr_param->service_name, service_names_it->name, strlen(service_names_it->name));
+
+                                //GC_thr_param->in_buffer = ack_buffer;               // Reads from common ack buffer
+
+                                //memset(service_name, 0, MAX_BUFF_NAME + 1);
+                                //sprintf(service_name, "%s|SEND BUFF", service_names_it->name);  // Deletes from send buffer
+                                //GC_thr_param->out_buffer = service_buffers_out->FindByName(service_name, service_buffers_out);
+
+                                //GC_thr_param->end_thr_flag = &thr_shudown_flag;
+                                //*GC_handle->handle = CreateThread(NULL, 0, &ServiceGCThr, GC_thr_param, 0, threadIDs + thread_counter);
+                                //GCHandle->Insert(GC_handle, &GCHandle);
+                                //++thread_counter;
+
+                                //// Create client communication thread
+                                //SOCKET_DATA* client_socket = (SOCKET_DATA*)malloc(sizeof(SOCKET_DATA));
+                                //if (client_socket == NULL) break;
+                                //client_socket->Initialize();
+
+                                //client_socket->socket = (SOCKET*)malloc(sizeof(SOCKET));
+                                //if (client_socket->socket == NULL) break;
+                                //*client_socket->socket = INVALID_SOCKET;
+
+                                //if ((*(client_socket->socket) = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+                                //{
+                                //    EnterCriticalSection(&disp);
+                                //    printf("An error occurred creating client buffering socket\n");
+                                //    LeaveCriticalSection(&disp);
+                                //}
+                                //else ++validClientsSockets;
+
+                                //client_socket->address = (sockaddr_in*)malloc(sizeof(sockaddr_in));
+                                //client_socket->address->sin_family = AF_INET;
+                                //networkParams->tcp_params->accept_socket_params[loc].FormatIP(ip_formatted);
+                                //client_socket->address->sin_addr.s_addr = inet_addr(ip_formatted);
+                                //client_socket->address->sin_port = htons(networkParams->tcp_params->accept_socket_params[loc].port);
+                                //client_socket_params->Insert(client_socket, &client_socket_params);
+
+                                //HANDLE_LST* client_handle = (HANDLE_LST*)(malloc(sizeof(HANDLE_LST)));
+                                //if (client_handle == NULL) { escapeFlag = true; break; }
+
+                                //client_handle->Initialize();
+                                //client_handle->handle = (HANDLE*)malloc(sizeof(HANDLE));
+                                //threadIDs[thread_counter] = thread_counter;
+
+                                //CLIENT_THR_PARAMS* client_thr_param = (CLIENT_THR_PARAMS*)malloc(sizeof(CLIENT_THR_PARAMS));
+                                //client_thr_param->Initialize();
+                                //memcpy(client_thr_param->service_name, service_names_it->name, strlen(service_names_it->name));
+
+                                //memset(service_name, 0, MAX_BUFF_NAME + 1);
+                                //sprintf(service_name, "%s|RECV BUFF", service_names_it->name);      // Reads what comes from sockets and stores it
+                                //client_thr_param->in_buffer = service_buffers_in->FindByName(service_name, service_buffers_in);
+
+                                //memset(service_name, 0, MAX_BUFF_NAME + 1);                         // Reads what commes from mirroring and sends it trough socket
+                                //sprintf(service_name, "%s|SEND BUFF", service_names_it->name);
+                                //client_thr_param->out_buffer = service_buffers_out->FindByName(service_name, service_buffers_out);
+
+                                //client_thr_param->end_thr_flag = &thr_shudown_flag;
+                                //*client_handle->handle = CreateThread(NULL, 0, &ClientReqHandleThr, client_thr_param, 0, threadIDs + thread_counter);
+                                //clientReqHandle->Insert(client_handle, &clientReqHandle);
+                                //++thread_counter;
+                                //
                                 EnterCriticalSection(&disp);
                                 printf("[THREAD LST/RECV] Delta threads created\n\n");
                                 LeaveCriticalSection(&disp);
@@ -363,7 +337,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                             free(new_names);
                             break; 
                         }
-                        case 1: 
+                        case SERVICE_MSG: 
                         {
                             HandleServiceMsg();
                             break; 
@@ -371,11 +345,11 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                     }
                 }
 
-                if (FD_ISSET(sub->socket, &exc_set))   // Error
+                if (FD_ISSET(*sub->socket, &read_set))   // Error
                 {
                     EnterCriticalSection(&disp);
                     printf("[THREAD LST/RECV]:\n\tAn error occurred communicating with service on: %s:%hu\n\n",
-                        inet_ntoa(sub->address->sin_addr), htons(sub->address->sin_port));
+                        inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
                     LeaveCriticalSection(&disp);
 
                     params.subscriebers->RemoveByRef(sub, &params.subscriebers);
@@ -396,7 +370,8 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                     do
                     {
                         // If not Try - accept
-                        tmpSocket = accept(*params.listen_socket_params->socket, (struct sockaddr*)&tmpAddr, NULL);
+                        int addr_len = sizeof(sockaddr_in);
+                        tmpSocket = accept(*params.listen_socket_params->socket, (struct sockaddr*)&tmpAddr, &addr_len);
                         //Ignore if accept failed
                         if (tmpSocket == INVALID_SOCKET)
                         {
@@ -407,20 +382,28 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
                             continue;
                         }
                         EnterCriticalSection(&disp);
-                        printf("[THREAD LST/RECV]:\n\tService accepted at: %s:%hu\n\n", inet_ntoa(tmpAddr.sin_addr), htons(tmpAddr.sin_port));
+                        printf("[THREAD LST/RECV]:\n\tService accepted at: %s:%hu\n\n", inet_ntoa(tmpAddr.sin_addr), ntohs(tmpAddr.sin_port));
                         LeaveCriticalSection(&disp);
 
                         // Try set accepted client in non-blocking regime
                         if (ioctlsocket(tmpSocket, FIONBIO, &mode) == 0)
                         {
                             // If user accepted send him services hosted by you
-                            if (send(tmpSocket, msg.content, (int)(msg.content_size), 0) != SOCKET_ERROR)
+                            char* mess=(char*)malloc(6 + msg.content_size + 1);
+                            memset(mess, 0, 6 + msg.content_size + 1);
+                            *((unsigned short*)mess) = msg.msg_code;
+                            *((unsigned*)(mess+2)) = msg.content_size;
+                            memcpy(mess + 6, msg.content, msg.content_size);
+
+                            if (send(tmpSocket, mess, 6+msg.content_size+1, 0) != SOCKET_ERROR)
                             {
                                 EnterCriticalSection(&disp);
                                 printf("[THREAD LST/RECV]:\n\tServices offer sent to accepted client\n\n");
                                 LeaveCriticalSection(&disp);
                                 OUT_SERVICE* sub = (OUT_SERVICE*)malloc(sizeof(OUT_SERVICE));
                                 sub->Initialize();
+                                sub->address=(sockaddr_in*)(malloc(sizeof(sockaddr_in)));
+                                sub->socket = (SOCKET*)(malloc(sizeof(SOCKET)));
 
                                 memcpy(sub->address, &tmpAddr, sizeof(tmpAddr));
                                 memcpy(sub->socket, &tmpSocket, sizeof(tmpSocket));
@@ -457,7 +440,7 @@ DWORD WINAPI ListenSocketThr(LPVOID lpParam)
     }
     free(msg.content);
     EnterCriticalSection(&disp);
-    printf("[THREAD LST/RECV]:\n\tClosing thread...\n\n");
+    printf("[THREAD LST/RECV]:\n\tClosing thread..\n\n");
     --thread_counter;
     LeaveCriticalSection(&disp);
 }
@@ -475,7 +458,7 @@ DWORD WINAPI ServiceLoaderThr(LPVOID lpParam)
     } while (!*(params.end_thr_flag));
 
     EnterCriticalSection(&disp);
-    printf("[THREAD %s LOAD]:\n\tClosing thread...\n\n", params.service_name);
+    printf("[THREAD %s LOAD]:\n\tClosing thread..\n\n", params.service_name);
     --thread_counter;
     LeaveCriticalSection(&disp);
     return 0;
@@ -494,7 +477,7 @@ DWORD WINAPI ServiceGCThr(LPVOID lpParam)
     } while (!*(params.end_thr_flag));
 
     EnterCriticalSection(&disp);
-    printf("[THREAD %s GC]:\n\tClosing thread...\n\n", params.service_name);
+    printf("[THREAD %s GC]:\n\tClosing thread..\n\n", params.service_name);
     --thread_counter;
     LeaveCriticalSection(&disp);
     return 0;
@@ -513,7 +496,7 @@ DWORD WINAPI InputHandleThr(LPVOID lpParam)
     } while (!*(params.end_thr_flag));
 
     EnterCriticalSection(&disp);
-    printf("[THREAD INPUT]:\n\tClosing thread...\n\n");
+    printf("[THREAD INPUT]:\n\tClosing thread..\n\n");
     --thread_counter;
     LeaveCriticalSection(&disp);
     return 0;
@@ -532,7 +515,7 @@ DWORD WINAPI OutputHandleThr(LPVOID lpParam)
     } while (!*(params.end_thr_flag));
 
     EnterCriticalSection(&disp);
-    printf("[THREAD OUTPUT]:\n\tClosing thread...\n\n");
+    printf("[THREAD OUTPUT]:\n\tClosing thread..\n\n");
     --thread_counter;
     LeaveCriticalSection(&disp);
     return 0;
@@ -551,7 +534,7 @@ DWORD WINAPI ClientReqHandleThr(LPVOID lpParam)
     } while (!*(params.end_thr_flag));
 
     EnterCriticalSection(&disp);
-    printf("[THREAD %s CLIENT]:\n\tClosing thread...\n\n", params.service_name);
+    printf("[THREAD %s CLIENT]:\n\tClosing thread..\n\n", params.service_name);
     --thread_counter;
     LeaveCriticalSection(&disp);
     return 0;
@@ -561,11 +544,7 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
 {
     // Define expose message
     SETUP_MSG msg;
-    msg.Initialize();
-    msg.msg_code = SERVICES_ENL;
-    msg.content_size = (MAX_SERVICE_NAME_SIZE + 1) * MAX_ACCEPT_SOCKETS + (MAX_ACCEPT_SOCKETS - 1) + 1;
-    msg.content = (char*)malloc(msg.content_size);
-    service_names->Format(msg.content, msg.content_size, -1, service_names);
+    GenerateDeltaMsg(&msg, service_names);
 
     // Describe target (mirroring servers)
     char ip_formatted[13];
@@ -611,7 +590,12 @@ bool ExposeServices(SOCKETPARAMS* targetParams, SERVICE_NAME* service_names, OUT
         free(outService);
     }
 
-    if (send(*sub->socket, msg.content, strlen(msg.content)+1, 0) != SOCKET_ERROR)
+    char* mess = (char*)malloc(6 + msg.content_size + 1);
+    memset(mess, 0, 6 + msg.content_size + 1);
+    *((unsigned short*)mess) = msg.msg_code;
+    *((unsigned*)(mess + 2)) = msg.content_size;
+    memcpy(mess + 6, msg.content, msg.content_size);
+    if (send(*sub->socket, mess, 6+msg.content_size+1, 0) != SOCKET_ERROR)
     {
         EnterCriticalSection(&disp);
         printf("[EXPOSE]:\n\tServices offer sent to %s:%hu\n\n", inet_ntoa(sub->address->sin_addr), ntohs(sub->address->sin_port));
@@ -663,6 +647,7 @@ int main()
 {
     // Core variables
     NETWORKING_PARAMS* networkParams    = NULL; // Contains all network data (ports, ip addresses and its function)
+    BUFF_PARAMS buffParams;                     // Contains all buffer sizes
     BUFF_DESC* input_buffer             = NULL; // Buffer for incoming data
     BUFF_DESC* ack_buffer               = NULL; // Buffer for ack-ed data
     BUFF_DESC* service_buffers_in       = NULL; // Buffers for each mirror service, client reads them, service writes them ( comes from network )
@@ -700,7 +685,7 @@ int main()
         case true:
         {
             // Read Network setup
-            printf("Loading network data...\n");
+            printf("Loading network data..\n");
             char cwd[FILENAME_MAX];
             if (getcwd(cwd, sizeof(cwd)) == NULL)
             {
@@ -854,7 +839,7 @@ int main()
 
             //Load buffers configuration
             bool successFlag = false;
-            printf("Loading memory data...\n\n");
+            printf("Loading memory data..\n\n");
             if (getcwd(cwd, sizeof(cwd)) == NULL) 
             {
                 printf("Error loading path\n");
@@ -872,7 +857,7 @@ int main()
                 printf("Opening MemCfg at %s failed, closing..\n", cwd);
                 break;
             }
-            BUFF_PARAMS buffParams = LoadBufferParams(&fptr, &successFlag);
+            buffParams = LoadBufferParams(&fptr, &successFlag);
             if (!buffParams.Validate()) break;
             fclose(fptr);
             printf("\nDone.\n");
@@ -882,7 +867,7 @@ int main()
             BUFF_DESC* tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
             tmp_buff->Initialize();
             if (input_buffer == NULL) input_buffer = tmp_buff;
-            else input_buffer->Insert(tmp_buff, input_buffer);
+            else input_buffer->Insert(tmp_buff, &input_buffer);
             tmp_buff->context = INBUF;                                     // Allocate for single input buff
             tmp_buff->capacity = buffParams.inqueue;
             tmp_buff->memory = (char*)(malloc(tmp_buff->capacity));
@@ -894,7 +879,7 @@ int main()
             tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
             tmp_buff->Initialize();
             if (ack_buffer == NULL) ack_buffer = tmp_buff;
-            else ack_buffer->Insert(tmp_buff, ack_buffer);
+            else ack_buffer->Insert(tmp_buff, &ack_buffer);
             tmp_buff->context = ACKBUF;
             tmp_buff->capacity = buffParams.ackqueue;
             tmp_buff->memory = (char*)(malloc(tmp_buff->capacity));
@@ -914,7 +899,7 @@ int main()
                 tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
                 tmp_buff->Initialize();
                 if (service_buffers_in == NULL) service_buffers_in = tmp_buff;
-                else service_buffers_in->Insert(tmp_buff, service_buffers_in);
+                else service_buffers_in->Insert(tmp_buff, &service_buffers_in);
 
                 if ((tmp_buff->memory = (char*)malloc(buffParams.service_in_queue)) == NULL)
                 {
@@ -936,7 +921,7 @@ int main()
                 tmp_buff = (BUFF_DESC*)malloc(sizeof(BUFF_DESC));
                 tmp_buff->Initialize();
                 if (service_buffers_out == NULL) service_buffers_out = tmp_buff;
-                else service_buffers_out->Insert(tmp_buff, service_buffers_out);
+                else service_buffers_out->Insert(tmp_buff, &service_buffers_out);
 
                 if ((tmp_buff->memory = (char*)malloc(buffParams.service_out_queue)) == NULL)
                 {
@@ -1035,7 +1020,7 @@ int main()
             printf("==================================================================================================\n");
             //
         }
-        printf("Starting thread initialization...\n");
+        printf("Starting thread initialization..\n");
         threadIDs = (DWORD*)malloc(sizeof(DWORD) * networkParams->tcp_params->listen_socket_units + MAX_SERVICES_HOSTED*3+1);
         // Create threads, assign buffers and expose sockets
         char ip_formatted[13];
@@ -1222,10 +1207,13 @@ int main()
                 ExposeServices(&(networkParams->tcp_params->accept_socket_params[loc]), service_names, subscriebers);
         }
     }   
+
     EnterCriticalSection(&disp);
-    printf("Press any key to close...");
-    getchar();
+    printf("==================================================================================================\n");
+    printf("\t\t[SERVER WORKING, PRESS ANY KEY TO SHUTDOWN]\n");
+    printf("==================================================================================================\n");
     LeaveCriticalSection(&disp);
+    do{Sleep(500);} while (!kbhit());
 
     // Safe termination of threads
 
@@ -1258,6 +1246,7 @@ int main()
     if (clientReqHandle         != NULL) {clientReqHandle->Dispose();            free(clientReqHandle);        clientReqHandle       = NULL;}
     if (threadIDs               != NULL) {                                       free(threadIDs);              threadIDs             = NULL;}
 
-
+    printf("Press any key to exit..\n");
+    getchar();
     return 0;
 }

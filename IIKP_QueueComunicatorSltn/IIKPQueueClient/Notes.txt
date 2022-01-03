@@ -15,6 +15,129 @@ ________________________________________________________________________________
 // provjeri da li je malloc vratio null
 // neke lokalne parametre za thread-ove ne pravi kao lokalne promjenjive
 __________________________________________________________________________________________________________________________
+OLD PACAGE PARSING (ne treba nam jer bi onda koristili pcap loop a ne preko recv)
+void PrintEthernetHeader(ethernet_header* eth)
+{
+    printf("========> ETHERNET HEADER <========\n");
+    printf("\tMAC DEST ADDR:\t%c:%c:%c:%c:%c:%c\n",
+        eth->dest_address[0], eth->dest_address[1],
+        eth->dest_address[2], eth->dest_address[3],
+        eth->dest_address[4],eth->dest_address[5]);
+
+    printf("\tSRC DEST ADDR:\t%c:%c:%c:%c:%c:%c\n",
+        eth->src_address[0], eth->src_address[1],
+        eth->src_address[2], eth->src_address[3],
+        eth->src_address[4], eth->src_address[5]);
+
+    printf("\tTYPE:\t\t%hu\n",eth->type);
+    printf("===================================\n");
+}
+
+void PrintIPHeader(ip_header* iph)
+{
+    printf("========> INTERNET HEADER <========\n");
+    printf("\tHDR LENGTH:\t%d\n",   iph->header_length);
+    printf("\tVERSION:\t%d\n",    iph->version);
+    printf("\tTOS:\t\t%d\n",        iph->tos);
+    printf("\tLENGTH:\t\t%hu\n",    iph->length);
+    printf("\tID:\t\t%hu\n",          iph->identification);
+    printf("\tFRAG_FO:\t%hu\n",     iph->fragm_fo);
+    printf("\tTTL:\t%d\n",          iph->ttl);
+    printf("\tNEXT PROTO:\t%d\n",   iph->next_protocol);
+    printf("\tCHECKSUM:\t%hu\n",    iph->checksum);
+    printf("\tSRC IP:\t\t%d.%d.%d.%d\n", 
+                iph->src_addr[3],   iph->src_addr[2], 
+                iph->src_addr[1],   iph->src_addr[0]);
+    printf("\tDST IP:\t\t%d.%d.%d.%d\n",
+                iph->dst_addr[3],   iph->dst_addr[2], 
+                iph->dst_addr[1],   iph->dst_addr[0]);
+    printf("\tOPT PADDING:\t %u\n", iph->options_padding);
+    printf("===================================\n");
+}
+
+void PrintTCPHeader(tcp_header* tcph)
+{
+    printf("===========> TCP HEADER <==========\n");
+    printf("\tSRC PORT:\t%hu\n", tcph->src_port);
+    printf("\tDST PORT:\t%hu\n", tcph->dest_port);
+    printf("\tSEQ. NUM:\t%u\n", tcph->sequence_num);
+    printf("\tSEQ. NUM:\t%u\n", tcph->ack_num);
+    printf("\tHDR LENGTH:\t%d\n", tcph->header_length);
+    printf("\tFLAGS:\t\t%d\n", tcph->flags);
+    printf("\tWINDOW SIZE:\t%hu\n", tcph->windows_size);
+    printf("\tCHECKSUM:\t%hu\n", tcph->checksum);
+    printf("\tURG. PTR:\t%hu\n", tcph->urgent_pointer);
+    printf("===================================\n");
+}
+
+char* ExtractAppData(char* msg, ethernet_header* eth, ip_header* iph, tcp_header* tcph)
+{
+    char* it = msg;
+    if (eth != NULL)
+    {
+        eth->src_address[5] = (unsigned char)it[0];
+        eth->src_address[4] = (unsigned char)it[1];
+        eth->src_address[3] = (unsigned char)it[2];
+        eth->src_address[2] = (unsigned char)it[3];
+        eth->src_address[1] = (unsigned char)it[4];
+        eth->src_address[0] = (unsigned char)it[5];
+
+        eth->dest_address[5] = (unsigned char)it[6];
+        eth->dest_address[4] = (unsigned char)it[7];
+        eth->dest_address[3] = (unsigned char)it[8];
+        eth->dest_address[2] = (unsigned char)it[9];
+        eth->dest_address[1] = (unsigned char)it[10];
+        eth->dest_address[0] = (unsigned char)it[11];
+
+        eth->type            = ntohs(*((unsigned short*)(it + 12)));
+    }
+    it += 14;
+
+    if (iph != NULL)
+    {
+        iph->header_length      = (unsigned char)(it[0] & 0xb00001111);
+        iph->version            = (unsigned char)((it[0] & 0xb11110000) >> 4);
+        iph->tos                = (unsigned char)it[1];
+        iph->length             = ntohs(*((unsigned short*)(it + 2)));
+        iph->identification     = ntohs(*((unsigned short*)(it + 4)));
+        iph->fragm_fo           = ntohs(*((unsigned short*)(it + 6)));
+        iph->ttl                = (unsigned char)it[7];
+        iph->next_protocol      = (unsigned char)it[8];
+        iph->checksum           = ntohs(*((unsigned short*)(it + 9)));
+
+        iph->src_addr[3]        = (unsigned char)it[11];
+        iph->src_addr[2]        = (unsigned char)it[12];
+        iph->src_addr[1]        = (unsigned char)it[13];
+        iph->src_addr[0]        = (unsigned char)it[14];
+
+        iph->dst_addr[3]        = (unsigned char)it[15];
+        iph->dst_addr[2]        = (unsigned char)it[16];
+        iph->dst_addr[1]        = (unsigned char)it[17];
+        iph->dst_addr[0]        = (unsigned char)it[18];
+
+        iph->options_padding= (int)ntohs(*((unsigned short*)(it + 19)));
+    }
+    it += ((unsigned short)(it[0] & 0xb00001111)) * 4;
+    
+    if (tcph != NULL)
+    {
+        tcph->src_port          = ntohs(*((unsigned short*)it));
+        tcph->dest_port         = ntohs(*((unsigned short*)(it+2)));
+        tcph->sequence_num      = (int)ntohl(*((unsigned short*)(it + 4)));
+        tcph->ack_num           = (int)ntohl(*((unsigned short*)(it + 8)));
+        tcph->reserved          = (unsigned char)(it[12] & 0xb00001111);
+        tcph->header_length     = (unsigned char)((it[12] & 0xb11110000) >> 4);
+        tcph->flags             = (unsigned char)it[13];
+        tcph->windows_size      = ntohs(*((unsigned short*)(it + 14)));
+        tcph->checksum          = ntohs(*((unsigned short*)(it + 16)));
+        tcph->urgent_pointer    = ntohs(*((unsigned short*)(it + 18)));
+    }
+    it += (unsigned char)((it[12] & 0xb11110000) >> 4) * 4;
+
+    return it;
+}
+//////////////////////////////////////////////////////////////////////////////////////
+
 Rucno punjenje strukture:
             /////////////////////////////MANUALLY LOADING NETWORK PARAMS//////////////////////////////////////////////////
             //networkParams->tcp_params = (TCPNETWORK_PARAMS*)malloc(sizeof(TCPNETWORK_PARAMS));

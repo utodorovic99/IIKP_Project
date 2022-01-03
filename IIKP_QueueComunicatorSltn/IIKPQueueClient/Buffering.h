@@ -94,11 +94,11 @@ typedef struct BUFF_DESC
 		stop = 0;
 	}
 
-    void Insert(BUFF_DESC* newEl, BUFF_DESC* head)
+    void Insert(BUFF_DESC* newEl, BUFF_DESC** head)
     {
-        if (head == NULL)
-            {head = newEl; return;}
-        BUFF_DESC* freeLoc = head;
+        if (*head == NULL)
+            {*head = newEl; return;}
+        BUFF_DESC* freeLoc = *head;
         while (freeLoc->next != NULL) freeLoc = freeLoc->next;
 
         freeLoc->next = newEl;

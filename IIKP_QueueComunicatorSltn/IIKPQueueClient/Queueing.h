@@ -100,6 +100,38 @@ typedef struct SERVICE_NAME
 		return num;
 	}
 
+	bool Contains(SERVICE_NAME* elem, SERVICE_NAME* head)
+	{
+		SERVICE_NAME* it = head;
+		while (it != NULL)
+		{
+			if (!strcmp(it->name, elem->name)) return true;
+			it = it->next;
+		}
+		return false;
+	}
+
+	void Remove(SERVICE_NAME* to_del, SERVICE_NAME** head)
+	{
+		if (*head == to_del)*head = to_del->next;
+		else
+		{
+			SERVICE_NAME* it_prev = *head;
+			SERVICE_NAME* it = (*head)->next;
+			while (it != NULL)
+			{
+				if (it == to_del)
+					{it_prev->next = it->next; break;}
+
+				it_prev = it;
+				it = it->next;
+			}
+		}
+		free(name);
+		name = NULL;
+		next = NULL;	
+	}
+
 } SERVICE_NAME;
 
 
@@ -294,12 +326,29 @@ typedef struct LISTENING_THR_PARAMS
 	SERVICE_NAME* service_names;
 	bool* end_thr_flag;
 
+	// Required for delta service init.
+	BUFF_PARAMS* buff_params;			// Could read from elems of list instead
+	BUFF_DESC* service_buffers_in;		// Input buffer  (for client)
+	BUFF_DESC* service_buffers_out;		// Output buffer (for client)
+	BUFF_DESC* input_buffer;			// Service input (for loader)
+	BUFF_DESC* ack_buffer;				// Ack buffer	 (for ack handle)
+	HANDLE_LST* client_req_handle;		// For client connections
+	DWORD* threadIDs;					// For all threads
+
 	void Initialize()
 	{
 		listen_socket_params = NULL;
-		subscriebers = NULL;
-		service_names = NULL;
-		end_thr_flag = NULL;
+		subscriebers		 = NULL;
+		service_names		 = NULL;
+		end_thr_flag		 = NULL;
+
+		buff_params			 = NULL;
+		service_buffers_in	 = NULL;
+		service_buffers_out  = NULL;
+	    input_buffer		 = NULL;
+		ack_buffer			 = NULL;
+		client_req_handle	 = NULL;
+		threadIDs			 = NULL;
 	}
 
 	void Dispose()
@@ -316,8 +365,17 @@ typedef struct LISTENING_THR_PARAMS
 			subscriebers = NULL;
 		}
 
-		service_names = NULL;
-		end_thr_flag = NULL;	
+		// Common, do not dispose
+		service_names		= NULL;
+		end_thr_flag		= NULL;
+
+		buff_params			= NULL;
+		service_buffers_in	= NULL;
+		service_buffers_out = NULL;
+		input_buffer		= NULL;
+		ack_buffer			= NULL;
+		client_req_handle	= NULL;
+		threadIDs			= NULL;
 	}
 
 } LISTENING_THR_PARAMS;

@@ -41,4 +41,4 @@ typedef struct SERVICE_MSG
 
 }SERVICE_MSG;
 
-enum  EQueueingMsgType { SERVICES_ENL = 0, SERVICE_MSG = 1 };
+enum  EQueueingMsgType { SERVICES_ENL = 1, SERVICE_MSG = 2 };
