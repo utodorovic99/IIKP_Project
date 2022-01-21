@@ -1,4 +1,24 @@
+Razviti servis za razmenu podataka preko redova za poruke (message
+queueing service). Servis treba da omogu?i razmenu poruka izme?u parova
+procesa koji se nalaze na dva ra?unara, preko odvojenih redova poruka za
+svaki par. Svaki proces može da se zaka?i za ta?no jedan red poruka na
+jednom servisu, a na jedan red poruka na jednom servisu može da se zaka?i
+najviše jedan proces.
+Prilikom startovanja servisa, na obe strane se zadaju imena redova poruka
+na koje mogu da se zaka?e procesi. Kada se uspostavi veza izme?u servisa,
+obe strane ?e razmeniti imena napravljenih redova. Servis implementira
+slede?i interface:
+Connect(char * queueName), klijent se ka?i na odredjeni red na svom
+servisu. Ukoliko ve? postoje poruke, klijent ih prima po uspostavi
+konekcije. Ukoliko red queueName ne postoji, napraviti ga.
+SendMessage(void* message, int messageSize), klijent šalje poruku drugom
+klijentu koji se zaka?io na red sa istim imenom na drugom ra?unaru.
+Servis treba da omogu?i pouzdan transport poruka. Poruka ?e biti sklonjena
+sa reda tek kada je isporu?ena odredištu. Ukoliko odredište ne postoji,
+sa?uvati poruku dok se ono ne pojavi.
 
+Pozz,
+Sasa
 __________________________________________________________________________________________________________________________
 # Ugljesa
 

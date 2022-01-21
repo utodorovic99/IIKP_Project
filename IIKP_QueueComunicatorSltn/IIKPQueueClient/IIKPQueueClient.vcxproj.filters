@@ -11,7 +11,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="IIKPQueueClient.cpp">
+    <ClCompile Include="IIKPQueueService.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -29,9 +29,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="protocol_headers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
