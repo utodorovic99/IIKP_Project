@@ -554,10 +554,10 @@ int main()
                 {
                     memset(message_buff, 0, MAX_MESSAGE_SIZE);
                     gets_s(message_buff, MAX_MESSAGE_SIZE-1);
-                    memcpy(message_buff + 3, message_buff, strlen(message_buff));
+                    memcpy(message_buff + 4, message_buff, strlen(message_buff));
                     *((EQueueingMsgType*)(message_buff)) = CLIENT_ENQ;
                     TrimEndNL(message_buff, MAX_MESSAGE_SIZE);
-                    if (send(service_sock, message_buff, strlen(message_buff), 0) == SOCKET_ERROR)
+                    if (send(service_sock, message_buff, 4+strlen(message_buff+4), 0) == SOCKET_ERROR)
                     {
                         printf("[CLIENT]:\nSending message failed, press \'e\' to exit, other key to retry.. \n");
 

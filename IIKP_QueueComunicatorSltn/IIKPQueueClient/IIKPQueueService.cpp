@@ -824,7 +824,8 @@
                                 {
                                 case CLIENT_ENQ:
                                 {
-                                    CLIENT_MSG_ENQ* recv_msg = (CLIENT_MSG_ENQ*)message_buff;
+                                    CLIENT_MSG_ENQ* recv_msg=(CLIENT_MSG_ENQ*)(malloc(sizeof(CLIENT_MSG_ENQ)));
+                                    recv_msg->msg_code = CLIENT_ENQ;
                                     recv_msg->content = message_buff + 4;
 
                                     EnterCriticalSection(&disp);
@@ -838,12 +839,14 @@
 
                                     unsigned short code = SERVICE_MSG;
                                     unsigned size=4+ strlen(params.service_name)+1+strlen(recv_msg->content)+1+4;
-                                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
-                                    memcpy(message_buff, &size, 4);
-                                    memcpy(message_buff+2, (char*)&code, 2);
-                                    memcpy(message_buff+2 + 2, params.service_name, strlen(params.service_name));
-                                    memcpy(message_buff+2 + 2 + strlen(params.service_name) + 1, recv_msg->content, strlen(recv_msg->content));
-                                    memcpy(message_buff+2 + 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1, &msg_id_cnt, 4);
+                                    char* out_msg = (char*)malloc(size);
+                                    memset(out_msg, 0, size);
+                                    memset(out_msg, 0, MAX_MESSAGE_SIZE);
+                                    memcpy(out_msg, &size, 4);
+                                    memcpy(out_msg +2, (char*)&code, 2);
+                                    memcpy(out_msg +2 + 2, params.service_name, strlen(params.service_name));
+                                    memcpy(out_msg +2 + 2 + strlen(params.service_name) + 1, recv_msg->content, strlen(recv_msg->content));
+                                    memcpy(out_msg +2 + 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1, &msg_id_cnt, 4);
                                     ++msg_id_cnt;
 
                                     if (params.in_buffer->Enqueue(message_buff, 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1 + 4))     // Try Enqueue for mirroring
@@ -891,7 +894,8 @@
                                             break;
                                         }
                                     }
-
+                                    free(out_msg);
+                                    free(recv_msg);
                                     break;
                                 }
                                 }
@@ -1357,14 +1361,13 @@
                                                 client_thr_param->in_buffer = new_recv_buff;
                                                 client_thr_param->out_buffer = new_send_buff;
                                                 client_thr_param->accept_trigger = &(params.accept_triggers[service_idx]);    // Index of service wich would later be inserted at MARKER: #1
-                                                ++service_idx;
 
                                                 client_thr_param->end_thr_flag = params.end_thr_flag;
                                                 client_thr_param->socket_data_accepted = (*params.client_socket_params)->At(service_idx , *params.client_socket_params);
                                                 *client_handle->handle = CreateThread(NULL, 0, &ClientReqHandleThr, client_thr_param, 0, params.threadIDs + thread_counter);
                                                 (*params.client_req_handle)->Insert(client_handle, params.client_req_handle);
-                                                (*params.client_socket_params)->Insert(client_socket, params.client_socket_params);
                                                 ++thread_counter;
+                                                ++service_idx;
 
                                                 printf("[THREAD LST/RECV] Done.\n\n");
                                                 SERVICE_NAME* to_add = (SERVICE_NAME*)malloc(sizeof(SERVICE_NAME));
@@ -2136,7 +2139,7 @@ int main()
         listenSocketThr_params.loader_handle        = &loader_handle;
         listenSocketThr_params.GC_handle            = &GC_handle;
         listenSocketThr_params.threadIDs            = thread_IDs;
-        listenSocketThr_params.client_socket_params = &client_sock_params;    
+        listenSocketThr_params.client_socket_params = &client_sock_params;
         listenSocketThr_params.expose_mess          = msg;
         listenSocketThr_params.expose_mess_buff     = mess;
         listenSocketThr_params.reinit_sock_data     = &(network_params->tcp_params->accept_socket_params[target_loc]);

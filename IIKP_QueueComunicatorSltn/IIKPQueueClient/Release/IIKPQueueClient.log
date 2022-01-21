@@ -6,14 +6,16 @@ C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_
 C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(278,32): warning C4473: 'printf' : not enough arguments passed for format string
 C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(278,32): message : placeholders and their parameters expect 3 variadic arguments, but 2 were provided
 C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(278,32): message : the missing variadic argument 3 is required by format string '%s'
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1462,81): warning C4474: 'sprintf' : too many arguments passed for format string
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1462,81): message : placeholders and their parameters expect 0 variadic arguments, but 1 were provided
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1195,46): warning C4101: 'GC_handle': unreferenced local variable
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1194,46): warning C4101: 'loader_handle': unreferenced local variable
-C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1193,46): warning C4101: 'client_req_handle': unreferenced local variable
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1466,81): warning C4474: 'sprintf' : too many arguments passed for format string
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1466,81): message : placeholders and their parameters expect 0 variadic arguments, but 1 were provided
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1200,46): warning C4101: 'GC_handle': unreferenced local variable
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1199,46): warning C4101: 'loader_handle': unreferenced local variable
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1198,46): warning C4101: 'client_req_handle': unreferenced local variable
   Generating code
-  2 of 85 functions ( 2.4%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+  Previous IPDB and IOBJ mismatch, fall back to full compilation.
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(660): warning C4715: 'ClientRegisterThr': not all control paths return a value
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(217): warning C4715: 'ExposeServices': not all control paths return a value
+C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\IIKPQueueClient\IIKPQueueService.cpp(1549): warning C4715: 'ServiceCommunicationThr': not all control paths return a value
+  All 85 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
   Finished generating code
   IIKPQueueClient.vcxproj -> C:\Users\Ugljesa\Desktop\Fakultet\4. Godina\IIKP\IIKP_Project\IIKP_Project\IIKP_QueueComunicatorSltn\Release\IIKPQueueService.exe
