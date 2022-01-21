@@ -326,6 +326,27 @@ typedef struct SOCKET_DATA
 		}
 	}
 
+	//Removes item from list without resources disposal
+	//SOCKET_DATA** head	- pointer to list head
+	//SOCKET_DATA* target	- element to be deleted
+	void Detach(SOCKET_DATA** head, SOCKET_DATA* target)
+	{
+		if (*head == target) { *head = target->next; return; }	// If head
+		SOCKET_DATA* it = (*head)->next;
+		SOCKET_DATA* it_prev = *head;
+		while (it != NULL)	// If not
+		{
+			if (it == target)
+			{
+				it_prev->next = it->next;	// Skip
+				return;
+			}
+
+			it_prev = it;
+			it = it->next;
+		}
+	}
+
 } SOCKET_DATA;
 
 // List of thread handles

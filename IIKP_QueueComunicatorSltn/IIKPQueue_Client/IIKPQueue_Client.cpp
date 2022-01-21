@@ -10,10 +10,13 @@
 #include <conio.h>
 #include "direct.h"
 
+#include "messages.h"
+
 #pragma comment(lib, "ws2_32.lib")
 #pragma warning(disable:4996) 
 
 #pragma region Constants
+    #define REQUEST_ACQUISITION_INTERVAL_MSECS 500
     #define MAX_RECORD_LENGTH 255
     #define MAX_MESSAGE_SIZE 255 
 #pragma endregion
@@ -227,6 +230,26 @@ typedef struct SERVICE_NAME
 
 } SERVICE_NAME;
 
+//Encapsulates thread parameters for RecvThr thread
+typedef struct RECV_THR_PARAMS 
+{ 
+    SOCKET* source;     //Pointer to service socket who sends messages
+    bool* executable;   //Is ready to go
+    bool*  restart;      //Trigger restart
+    bool* close;
+    bool closed;
+
+    void Initialize()
+    {
+        closed      = false;
+        closed      = NULL;
+        executable  = NULL;
+        restart     = NULL;
+        source      = NULL;
+    }
+
+}RECV_THR_PARAMS;
+
 #pragma region Function_Decl
     //Reads ServiceCfg.txt in order to retrive IPV4 address and port of target service
     //FILE* file        - Pointer to ServiceCfg.txt file descriptor
@@ -268,10 +291,66 @@ typedef struct SERVICE_NAME
 
     DWORD WINAPI RecvThr(LPVOID lp_param)
     {
-        do
-        {
+        RECV_THR_PARAMS params = *((RECV_THR_PARAMS*)lp_param);
+        fd_set read_set;
+        //fd_set write_set;
+        fd_set exc_set;
 
-        }while (true);
+        timeval time_val;
+        time_val.tv_sec = REQUEST_ACQUISITION_INTERVAL_MSECS/1000;
+        time_val.tv_usec = REQUEST_ACQUISITION_INTERVAL_MSECS % 1000;
+        
+
+        int i_result;
+        char message_buff[MAX_MESSAGE_SIZE];
+        do  
+        {
+            do
+            {
+                *params.restart = false;
+                do
+                {
+                    FD_ZERO(&read_set);
+                    FD_ZERO(&exc_set);
+                    //FD_ZERO(&write_set);
+
+                    FD_SET(*params.source, &read_set);
+                    FD_SET(*params.source, &exc_set);
+                    //FD_SET(*params.source, &write_set);
+
+                    i_result = select(0, &read_set, NULL, &exc_set, &time_val);
+                    if (i_result == SOCKET_ERROR)
+                    {
+                        printf("[CLIENT RECV]:\n\tAn error occurred on: Select socket\n\n");
+                        while (!*params.close)Sleep(1000);
+                        params.closed = true;
+                        return 0;
+                    }
+                    else if(i_result>0)
+                    {
+                        if (FD_ISSET(*params.source, &read_set))      // Has accept req happened
+                        {
+                            memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                            i_result= recv(*params.source, message_buff, MAX_MESSAGE_SIZE, 0);  //Recv. all service names
+                            printf("[CLIENT RECV]:\n\t%s\n", message_buff);
+                        }
+
+                        if (FD_ISSET(*params.source, &exc_set))      // Has accept req happened
+                            printf("[CLIENT RECV]:\n\tAn error happened at service socket\n");
+
+                        //if (FD_ISSET(*params.source, &write_set))      // Has accept req happened
+                        //    printf("[CLIENT RECV]:\n\tWrite happened at service socket\n");
+                        
+                            
+                    }
+
+                } while (*params.executable);
+
+            } while (*params.restart);
+
+        }while (!*params.close);
+        params.closed = true;
+        return 0;
     }
 
     void TrimEndNL(char* str, unsigned size)
@@ -295,6 +374,7 @@ int main()
     }
 
     SERVICE_NAME* service_names=NULL;
+    int i_result = 0;
     switch (true)
     {
         case true: 
@@ -329,9 +409,18 @@ int main()
 
             bool re_init;
             char message_buff[MAX_MESSAGE_SIZE];
+            RECV_THR_PARAMS recv_thr_params;
+            recv_thr_params.Initialize();
+            bool recv_executable;
+            bool recv_restart;
+            recv_thr_params.executable = &recv_executable;
+            recv_thr_params.restart = &recv_restart;
             do
             {
+                recv_executable = false;
+                recv_restart = false;
                 re_init = false;
+                recv_thr_params.source = NULL;
                 SOCKET service_sock;
                 if ((service_sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
                 {
@@ -341,20 +430,27 @@ int main()
                     if (message_buff[0] == 'e') break;
                     else
                     {
+                        recv_restart = true;
+                        Sleep(500);
                         re_init = true; continue;
                     }
                 }
 
 
-                if (connect(service_sock, (sockaddr*)&service_addr, sizeof(service_addr)) != 0)
+                if ((i_result= connect(service_sock, (sockaddr*)&service_addr, sizeof(service_addr))) != 0)
                 {
-                    printf("\n\nConnecting to service on %s:%hu failed, press \'e\' to exit, other key to retry.. \n",
-                        inet_ntoa(service_addr.sin_addr), ntohs(service_addr.sin_port));
+                    printf("\n\nConnecting to service on %s:%hu failed with %d, press \'e\' to exit, other key to retry.. \n",
+                        inet_ntoa(service_addr.sin_addr), ntohs(service_addr.sin_port), WSAGetLastError());
 
                     gets_s(message_buff, 2);
                     if(message_buff[0]=='e') break;
                     else
-                        {re_init = true; continue;}
+                    {
+                        recv_restart = true;
+                        Sleep(500);
+                        re_init = true; 
+                        continue;
+                    }
                 }
                 else
                     printf("\n\nConnected to %s:%hu\n",
@@ -400,7 +496,10 @@ int main()
                         if (message_buff[0] == 'e') break;
                         else
                         {
-                            re_init = true; continue;
+                            recv_restart = true;
+                            Sleep(500);
+                            re_init = true; 
+                            continue;
                         }
                     }
 
@@ -418,10 +517,46 @@ int main()
                 printf("Connected\n");
                 service_names->Dispose();
                 printf("==================================================================================================\n");
+                printf("--------- BUFFERED MESSAGES --------\n");
+                
+                tmp_size = 0;
+                do
+                {
+                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                    bytes_rec = recv(service_sock, message_buff, MAX_MESSAGE_SIZE, 0);
+                    if (!strcmp(message_buff, "BEND\0")) break;
+                    printf("\t%s\n", message_buff);
+                    ++tmp_size;
+                } while(true);
+                if (tmp_size == 0) printf("\tNONE\n");
+
+                unsigned long nb_mode = 1;
+                if (ioctlsocket(service_sock, FIONBIO, &nb_mode) == 0)
+                    printf("[CLIENT]\n\tService socket %s:%hu in non-blocking mode\n\n", 
+                        inet_ntoa(service_addr.sin_addr), ntohs(service_addr.sin_port));
+                else
+                {
+                    printf("[CLIENT]\n\tSetting service socket %s:%hu in non-blocking mode failed\n\n",
+                        inet_ntoa(service_addr.sin_addr), ntohs(service_addr.sin_port));
+                    shutdown(service_sock, SD_BOTH);
+                    closesocket(service_sock);
+                    recv_restart = true;
+                    Sleep(500);
+                    re_init = true;
+                    continue;
+                }
+                
+                recv_thr_params.source = &service_sock;
+                HANDLE recv_thr_handle = CreateThread(NULL, 0, &RecvThr, &recv_thr_params, 0, 0);
+
+                printf("==================================================================================================\n");
                 do
                 {
                     memset(message_buff, 0, MAX_MESSAGE_SIZE);
                     gets_s(message_buff, MAX_MESSAGE_SIZE-1);
+                    memcpy(message_buff + 3, message_buff, strlen(message_buff));
+                    *((EQueueingMsgType*)(message_buff)) = CLIENT_ENQ;
+                    TrimEndNL(message_buff, MAX_MESSAGE_SIZE);
                     if (send(service_sock, message_buff, strlen(message_buff), 0) == SOCKET_ERROR)
                     {
                         printf("[CLIENT]:\nSending message failed, press \'e\' to exit, other key to retry.. \n");
@@ -429,8 +564,15 @@ int main()
                         gets_s(message_buff, 2);
                         if (message_buff[0] == 'e') { re_init = false; break; }
                         else
-                         {re_init = true; break; }
+                         {
+                            recv_restart = true;
+                            Sleep(500);
+                            re_init = true;
+                            break; 
+                        }
                     }
+                    else
+                        printf("[CLIENT]:\nMessage sent.. \n");
 
                     if (re_init)break;
                 } while (strcmp(message_buff, "e\0") || re_init);       

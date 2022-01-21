@@ -271,7 +271,7 @@
                 while (cycles>0 && !*(params.end_thr_flag))
                 {
                     memset(accept_messg_buff, 0, MAX_SERVICE_NAME_SIZE + MAX_MESSAGE_SIZE + 4);
-                    params.in_buffer->Dequeue(accept_messg_buff);
+                    params.in_buffer->Dequeue(accept_messg_buff, strlen(accept_messg_buff));
                     service_msg = (struct SERVICE_MSG*)(accept_messg_buff);
                     if (!strcmp(params.service_name, service_msg->service)) // If my service
                     {
@@ -332,7 +332,7 @@
                 int cycles = buff_it->messges_enqueued;
                 while(cycles>0)       // Dequeue message
                 {
-                    buff_it->Dequeue(message_buff);
+                    buff_it->Dequeue(message_buff, strlen(message_buff));
                     msg = (struct SERVICE_MSG*)message_buff;
                     target_idx = params.service_names->IndexOf(msg->service, params.service_names);
                     while (sub_it->service_idx[service_loc] != -1 && sub_it->service_idx[service_loc] != target_idx) ++service_loc; // Try find if he is subbed
@@ -517,10 +517,8 @@
                                     inet_ntoa((*new_sock_params->address).sin_addr),
                                     ntohs((*new_sock_params->address).sin_port));
                                 LeaveCriticalSection(&disp);
-
-
                                 waiting_fetch_resp->Insert(new_sock_params, &waiting_fetch_resp);   
-                                // Wait for Connect message
+
                             }
                             else
                             {
@@ -586,11 +584,13 @@
                                     SOCKET_DATA* target_service_params = params.client_socket_params->At(target_service, params.client_socket_params);  // Fetch socket & addr params for ClientCommunication 
                                     target_service_params->address = pending_it->address;
                                     target_service_params->socket = pending_it->socket;
-                                    params.accept_triggers[target_service];                                                                             // Invoke thread start working on fetched socket
                                     SOCKET_DATA* to_rem = pending_it;
+                                    FD_CLR(*to_rem->socket, &read_set);
+                                    FD_CLR(*to_rem->socket, &exc_set);
                                     pending_it = pending_it->next;
-                                    to_rem->Remove(&waiting_fetch_resp, to_rem);
+                                    to_rem->Detach(&waiting_fetch_resp, to_rem);
                                     rem_happened = true;
+                                    params.accept_triggers[target_service] = true;                         // Invoke thread start working on fetched socket
                                 }
                                 else                                                                                                                    // Failed: Remove client
                                 {
@@ -634,14 +634,10 @@
 
                                 }
                             }
-
-
                         }
-
-
                     }
 
-                    if (FD_ISSET(*(pending_it->socket), &exc_set))
+                    if (pending_it != NULL && FD_ISSET(*(pending_it->socket), &exc_set))
                     {
                         EnterCriticalSection(&disp);
                         printf("[THREAD REGISTER]:\n\tAn errorr occurred on %s:%hu failed\n\n",
@@ -651,12 +647,10 @@
                         to_rem_pend->Insert(pending_it, &to_rem_pend);
                     }
 
-                    if (!rem_happened)
+                    if (pending_it!= NULL && !rem_happened)
                         pending_it = pending_it->next;
                 }
-
             }
-
         } while (!*params.end_thr_flag);
 
         EnterCriticalSection(&disp);
@@ -671,227 +665,257 @@
         printf("[THREAD %s CLIENT]:\n\tThread started\n\n", params.service_name);
         LeaveCriticalSection(&disp);
 
-        while (!*params.accept_trigger)
-        {
-            Sleep(REQUEST_ACQUISITION_INTERVAL_SECS); // Sleep until  Accepted in ClientRegisterThr fetch client
-            if (*params.end_thr_flag)
-            {
-                EnterCriticalSection(&disp);
-                printf("[THREAD %s CLIENT]:\n\tClosing thread...\n\n", params.service_name);
-                --thread_counter;
-                LeaveCriticalSection(&disp);
-                return 1;
-            }
-        }
-       
-        EnterCriticalSection(&disp);
-        printf("[THREAD %s CLIENT]:\n\tClient %s:%hu fetched to service thread\n\n",
-            params.service_name,
-            inet_ntoa(params.socket_data_accepted->address->sin_addr),
-            ntohs(params.socket_data_accepted->address->sin_port));
-        LeaveCriticalSection(&disp);
-
-        int addr_len = 0;
-        char message_buff[MAX_MESSAGE_SIZE];
-        int bytes_rec;
-        int cycles = 0;
         do
         {
+            while (!*params.accept_trigger)
+            {
+                Sleep(REQUEST_ACQUISITION_INTERVAL_SECS); // Sleep until  Accepted in ClientRegisterThr fetch client
+                if (*params.end_thr_flag)
+                {
+                    EnterCriticalSection(&disp);
+                    printf("[THREAD %s CLIENT]:\n\tClosing thread...\n\n", params.service_name);
+                    --thread_counter;
+                    LeaveCriticalSection(&disp);
+                    return 1;
+                }
+            }
+            *params.accept_trigger = false;
+
             EnterCriticalSection(&disp);
-            printf("[THREAD %s CLIENT]:\n\tBatch Dequeue for %s:%hu:\n\n",
+            printf("[THREAD %s CLIENT]:\n\tClient %s:%hu fetched to service thread\n\n",
                 params.service_name,
                 inet_ntoa(params.socket_data_accepted->address->sin_addr),
                 ntohs(params.socket_data_accepted->address->sin_port));
             LeaveCriticalSection(&disp);
 
-            memset(message_buff, 0, MAX_MESSAGE_SIZE);
-            #pragma omp atomic capture  // Send batch in atomic region
+            int addr_len = 0;
+            char message_buff[MAX_MESSAGE_SIZE];
+            int bytes_rec;
+            int cycles = 0;
+            bool send_failed;
+            do
             {
-                EnterCriticalSection(&disp);    // Single lock because inside atomic region
-                cycles = params.out_buffer->messges_enqueued;
-                while (params.out_buffer->Dequeue(message_buff))                                                                              // Send buffered messages when client connected
-                {
-                    
-                    if (send(*params.socket_data_accepted->socket, message_buff, strlen(message_buff), 0) != SOCKET_ERROR)                                      
-                        printf("[THREAD %s CLIENT]:\n\tBatch message successfully sent\n\n",params.service_name);
-                    else
-                    {
-                        printf("[THREAD %s CLIENT]:\n\tBatch message send failed\n\n", params.service_name);                                  // If failec keep if channel reopens later
-                        params.out_buffer->Enqueue(message_buff, strlen(message_buff) + 1);
-                    }
-                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
-                    --cycles;
-                }
-
-                if (send(*params.socket_data_accepted->socket, "BEND\0", strlen("BEND\0"), 0) != SOCKET_ERROR)                      // When done send BEND (Batch End)
-                {
-                    printf("[THREAD %s CLIENT]:\n\tBatch of buffered data seuccessfully sent. BEND sent to %s:%hu\n\n",
-                        params.service_name,
-                        inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                        ntohs(params.socket_data_accepted->address->sin_port));
-
-                }
-                else
-                {
-                    printf("[THREAD %s CLIENT]:\n\tBatch of buffered data seuccessfully sent. Sending BEND to %s:%hu failed\n\n",   // If not close and wait for another accept
-                        params.service_name,
-                        inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                        ntohs(params.socket_data_accepted->address->sin_port));
-                    LeaveCriticalSection(&disp);
-                    closesocket(*params.socket_data_accepted->socket);
-                    *params.socket_data_accepted->socket = INVALID_SOCKET;
-                    LeaveCriticalSection(&disp);
-                    continue;
-                }
+                EnterCriticalSection(&disp);
+                printf("[THREAD %s CLIENT]:\n\tBatch Dequeue for %s:%hu:\n\n",
+                    params.service_name,
+                    inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                    ntohs(params.socket_data_accepted->address->sin_port));
                 LeaveCriticalSection(&disp);
-            }
 
-
-            unsigned long mode = 1;
-
-            fd_set read_set;
-            fd_set exc_set;
-
-            timeval time_val;
-            time_val.tv_sec = REQUEST_ACQUISITION_INTERVAL_SECS;
-            time_val.tv_usec = 0;
-
-            FD_ZERO(&read_set);
-            FD_ZERO(&exc_set);
-
-            FD_SET(*params.socket_data_accepted->socket, &read_set);
-            FD_SET(*params.socket_data_accepted->socket, &exc_set);
-            int i_result;
-            while (!*(params.end_thr_flag))
-            {
-
-                // Check if Send is requested
-                i_result = select(0, &read_set, NULL, &exc_set, &time_val);
-                if (i_result == SOCKET_ERROR)
+                memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                #pragma omp atomic capture  // Send batch in atomic region
                 {
-                    EnterCriticalSection(&disp);
-                    printf("[THREAD %s CLIENT]:\n\tAn error occurred on: Select socket\n\n", params.service_name);
-                    LeaveCriticalSection(&disp);
-                }
-                else if (i_result > 0)
-                {
-                    EnterCriticalSection(&disp);
-                    printf("[THREAD %s CLIENT]:\n\tAcquisition done: %d events detected\n\n", params.service_name, i_result);
-                    LeaveCriticalSection(&disp);
-
-                    if (FD_ISSET(*params.socket_data_accepted->socket, &read_set))   // Client sent something
+                    EnterCriticalSection(&disp);    // Single lock because inside atomic region
+                    cycles = params.out_buffer->messges_enqueued;
+                    send_failed = false;
+                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                    while (cycles > 0 && params.out_buffer->Dequeue(message_buff, strlen(message_buff)))                                                                              // Send buffered messages when client connected
                     {
-                        memset(message_buff, 0, MAX_MESSAGE_SIZE);
-                        bytes_rec = recv(*params.socket_data_accepted->socket, message_buff, MAX_MESSAGE_SIZE, 0);
-                        if (bytes_rec <= 0)
-                        {
 
-                            EnterCriticalSection(&disp);
-                            printf("[THREAD %s CLIENT]:\n\tRecv failed on %s:%hu, closing socket\n\n",
+                        if (send(*params.socket_data_accepted->socket, message_buff, strlen(message_buff), 0) != SOCKET_ERROR)
+                            printf("[THREAD %s CLIENT]:\n\tBatch message successfully sent\n\n", params.service_name);
+                        else
+                        {
+                            printf("[THREAD %s CLIENT]:\n\tBatch message send failed\n\n", params.service_name);                                  // If failec keep if channel reopens later
+                            params.out_buffer->Enqueue(message_buff, strlen(message_buff) + 1);
+                            send_failed = true;
+                        }
+                        memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                        --cycles;
+                    }
+
+                    if (!send_failed)
+                    {
+                        if (send(*params.socket_data_accepted->socket, "BEND\0", strlen("BEND\0"), 0) != SOCKET_ERROR)                      // When done send BEND (Batch End)
+                        {
+                            printf("[THREAD %s CLIENT]:\n\tBatch of buffered data seuccessfully sent. BEND sent to %s:%hu\n\n",
+                                params.service_name,
+                                inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                ntohs(params.socket_data_accepted->address->sin_port));
+
+                        }
+                        else
+                        {
+                            printf("[THREAD %s CLIENT]:\n\tBatch of buffered data seuccessfully sent. Sending BEND to %s:%hu failed\n\n",   // If not close and wait for another accept
                                 params.service_name,
                                 inet_ntoa(params.socket_data_accepted->address->sin_addr),
                                 ntohs(params.socket_data_accepted->address->sin_port));
                             LeaveCriticalSection(&disp);
                             closesocket(*params.socket_data_accepted->socket);
                             *params.socket_data_accepted->socket = INVALID_SOCKET;
-                            break;
-
-                        }
-
-                        if (bytes_rec > 0)
-                        {
-                            switch (*((unsigned short*)message_buff))
-                            {
-                            case CLIENT_ENQ:
-                            {
-                                CLIENT_MSG_ENQ* recv_msg = (CLIENT_MSG_ENQ*)message_buff;
-
-                                EnterCriticalSection(&disp);
-                                printf("[THREAD %s CLIENT]:\n\tEnqueue request from %s:%hu, MSGID: %u\n\t%s\n\n",
-                                    params.service_name,
-                                    inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                                    ntohs(params.socket_data_accepted->address->sin_port),
-                                    recv_msg->msg_id,
-                                    recv_msg->content);
-                                LeaveCriticalSection(&disp);
-
-                                unsigned short code = SERVICE_MSG;
-                                memset(message_buff, 0, MAX_MESSAGE_SIZE);
-                                memcpy(message_buff, (char*)&code, 2);
-                                memcpy(message_buff+2, params.service_name, strlen(params.service_name));
-                                memcpy(message_buff + 2+ strlen(params.service_name)+1, recv_msg->content, strlen(recv_msg->content));
-                                memcpy(message_buff + 2 + strlen(params.service_name) + 1+ strlen(recv_msg->content)+1, &msg_id_cnt, 4);
-                                ++msg_id_cnt;
-
-                                if (params.in_buffer->Enqueue(message_buff, 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1+4))     // Try Enqueue for mirroring
-                                {
-                                    if (send(*params.socket_data_accepted->socket, "ACK\0", strlen("ACK\0"), 0) != SOCKET_ERROR)    // If OK send ack
-                                    {
-                                        printf("[THREAD %s CLIENT]:\n\tEnqueue request for MSGID: %u successed, ACK sent to %s:%hu\n\n",
-                                            params.service_name,
-                                            recv_msg->msg_id,
-                                            inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                                            ntohs(params.socket_data_accepted->address->sin_port));
-                                        LeaveCriticalSection(&disp);
-                                    }
-                                    else
-                                    {
-                                        printf("[THREAD %s CLIENT]:\n\tEnqueue request successed, sending ACK to %s:%hu failed\n\n",
-                                            params.service_name,
-                                            inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                                            ntohs(params.socket_data_accepted->address->sin_port));
-                                        LeaveCriticalSection(&disp);
-                                        closesocket(*params.socket_data_accepted->socket);
-                                        *params.socket_data_accepted->socket = INVALID_SOCKET;
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    if (send(*params.socket_data_accepted->socket, "NACK\0", strlen("NACK\0"), 0) != SOCKET_ERROR)   // if NOK send nack
-                                    {
-                                        printf("[THREAD %s CLIENT]:\n\tEnqueue request failed, NACK sent to %s:%hu\n\n",
-                                            params.service_name,
-                                            inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                                            ntohs(params.socket_data_accepted->address->sin_port));
-                                        LeaveCriticalSection(&disp);
-                                    }
-                                    else
-                                    {
-                                        printf("[THREAD %s CLIENT]:\n\tEnqueue request failed, sending NACK to %s:%hu failed\n\n",
-                                            params.service_name,
-                                            inet_ntoa(params.socket_data_accepted->address->sin_addr),
-                                            ntohs(params.socket_data_accepted->address->sin_port));
-                                        LeaveCriticalSection(&disp);
-                                        closesocket(*params.socket_data_accepted->socket);
-                                        *params.socket_data_accepted->socket = INVALID_SOCKET;
-                                        break;
-                                    }
-                                }
-
-                                break;
-                            }
-                            }
+                            LeaveCriticalSection(&disp);
+                            continue;
                         }
                     }
-                }
-
-            #pragma omp atomic capture  // Send what is buffered
-                {
-                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
-                    EnterCriticalSection(&disp);    // Single lock because inside atomic region
-                    while (params.out_buffer->Dequeue(message_buff + 2))
+                    else
                     {
-                        //Send
-
-                        memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                        printf("[THREAD %s CLIENT]:\n\tClient %s:%hu failed disconnected\n\n",   // If not close and wait for another accept
+                            params.service_name,
+                            inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                            ntohs(params.socket_data_accepted->address->sin_port));
+                        closesocket(*params.socket_data_accepted->socket);
+                        *params.socket_data_accepted->socket = INVALID_SOCKET;
+                        *params.accept_trigger = false;
+                        break;
                     }
                     LeaveCriticalSection(&disp);
                 }
-            }
 
-            Sleep(1000);
-        } while (!*(params.end_thr_flag));
+
+                unsigned long mode = 1;
+
+                fd_set read_set;
+                fd_set exc_set;
+
+                timeval time_val;
+                time_val.tv_sec = REQUEST_ACQUISITION_INTERVAL_SECS;
+                time_val.tv_usec = 0;
+
+                int i_result;
+                while (!*(params.end_thr_flag))
+                {
+                    FD_ZERO(&read_set);
+                    FD_ZERO(&exc_set);
+
+                    FD_SET(*params.socket_data_accepted->socket, &read_set);
+                    FD_SET(*params.socket_data_accepted->socket, &exc_set);
+
+                    // Check if Send is requested
+                    i_result = select(0, &read_set, NULL, &exc_set, &time_val);
+                    if (i_result == SOCKET_ERROR)
+                    {
+                        EnterCriticalSection(&disp);
+                        printf("[THREAD %s CLIENT]:\n\tAn error occurred on: Select socket\n\n", params.service_name);
+                        LeaveCriticalSection(&disp);
+                    }
+                    else if (i_result > 0)
+                    {
+                        EnterCriticalSection(&disp);
+                        printf("[THREAD %s CLIENT]:\n\tAcquisition done: %d events detected\n\n", params.service_name, i_result);
+                        LeaveCriticalSection(&disp);
+
+                        if (FD_ISSET(*params.socket_data_accepted->socket, &read_set))   // Client sent something
+                        {
+                            memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                            bytes_rec = recv(*params.socket_data_accepted->socket, message_buff, MAX_MESSAGE_SIZE, 0);
+                            if (bytes_rec <= 0)
+                            {
+
+                                EnterCriticalSection(&disp);
+                                printf("[THREAD %s CLIENT]:\n\tRecv failed on %s:%hu, closing socket\n\n",
+                                    params.service_name,
+                                    inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                    ntohs(params.socket_data_accepted->address->sin_port));
+                                LeaveCriticalSection(&disp);
+                                closesocket(*params.socket_data_accepted->socket);
+                                *params.socket_data_accepted->socket = INVALID_SOCKET;
+
+                                printf("[THREAD %s CLIENT]:\n\tClient %s:%hu failed disconnected\n\n",   // If not close and wait for another accept
+                                    params.service_name,
+                                    inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                    ntohs(params.socket_data_accepted->address->sin_port));
+                                *params.accept_trigger = false;
+                                break;
+                            }
+
+                            if (bytes_rec > 0)
+                            {
+                                switch (*((unsigned short*)message_buff))
+                                {
+                                case CLIENT_ENQ:
+                                {
+                                    CLIENT_MSG_ENQ* recv_msg = (CLIENT_MSG_ENQ*)message_buff;
+                                    recv_msg->content = message_buff + 4;
+
+                                    EnterCriticalSection(&disp);
+                                    printf("[THREAD %s CLIENT]:\n\tEnqueue request from %s:%hu, MSGID: %u\n\t%s\n\n",
+                                        params.service_name,
+                                        inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                        ntohs(params.socket_data_accepted->address->sin_port),
+                                        recv_msg->msg_id,
+                                        recv_msg->content);
+                                    LeaveCriticalSection(&disp);
+
+                                    unsigned short code = SERVICE_MSG;
+                                    unsigned size=4+ strlen(params.service_name)+1+strlen(recv_msg->content)+1+4;
+                                    memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                                    memcpy(message_buff, &size, 4);
+                                    memcpy(message_buff+2, (char*)&code, 2);
+                                    memcpy(message_buff+2 + 2, params.service_name, strlen(params.service_name));
+                                    memcpy(message_buff+2 + 2 + strlen(params.service_name) + 1, recv_msg->content, strlen(recv_msg->content));
+                                    memcpy(message_buff+2 + 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1, &msg_id_cnt, 4);
+                                    ++msg_id_cnt;
+
+                                    if (params.in_buffer->Enqueue(message_buff, 2 + strlen(params.service_name) + 1 + strlen(recv_msg->content) + 1 + 4))     // Try Enqueue for mirroring
+                                    {
+                                        if (send(*params.socket_data_accepted->socket, "ACK\0", strlen("ACK\0"), 0) != SOCKET_ERROR)    // If OK send ack
+                                        {
+                                            printf("[THREAD %s CLIENT]:\n\tEnqueue request for MSGID: %u successed, ACK sent to %s:%hu\n\n",
+                                                params.service_name,
+                                                recv_msg->msg_id,
+                                                inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                                ntohs(params.socket_data_accepted->address->sin_port));
+                                            LeaveCriticalSection(&disp);
+                                        }
+                                        else
+                                        {
+                                            printf("[THREAD %s CLIENT]:\n\tEnqueue request successed, sending ACK to %s:%hu failed\n\n",
+                                                params.service_name,
+                                                inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                                ntohs(params.socket_data_accepted->address->sin_port));
+                                            LeaveCriticalSection(&disp);
+                                            closesocket(*params.socket_data_accepted->socket);
+                                            *params.socket_data_accepted->socket = INVALID_SOCKET;
+                                            break;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (send(*params.socket_data_accepted->socket, "NACK\0", strlen("NACK\0"), 0) != SOCKET_ERROR)   // if NOK send nack
+                                        {
+                                            printf("[THREAD %s CLIENT]:\n\tEnqueue request failed, NACK sent to %s:%hu\n\n",
+                                                params.service_name,
+                                                inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                                ntohs(params.socket_data_accepted->address->sin_port));
+                                            LeaveCriticalSection(&disp);
+                                        }
+                                        else
+                                        {
+                                            printf("[THREAD %s CLIENT]:\n\tEnqueue request failed, sending NACK to %s:%hu failed\n\n",
+                                                params.service_name,
+                                                inet_ntoa(params.socket_data_accepted->address->sin_addr),
+                                                ntohs(params.socket_data_accepted->address->sin_port));
+                                            LeaveCriticalSection(&disp);
+                                            closesocket(*params.socket_data_accepted->socket);
+                                            *params.socket_data_accepted->socket = INVALID_SOCKET;
+                                            break;
+                                        }
+                                    }
+
+                                    break;
+                                }
+                                }
+                            }
+                        }
+                    }
+
+                    //#pragma omp atomic capture  // Send what is buffered
+                    //{
+                    //    memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                    //    EnterCriticalSection(&disp);    // Single lock because inside atomic region
+                    //    while (params.out_buffer->Dequeue(message_buff + 2, strlen(message_buff + 2)))
+                    //    {
+                    //        //Send
+
+                    //        memset(message_buff, 0, MAX_MESSAGE_SIZE);
+                    //    }
+                    //    LeaveCriticalSection(&disp);
+                    //}
+                }
+
+                Sleep(1000);
+            } while (!*(params.end_thr_flag));
+        } while (!*params.accept_trigger && !*params.end_thr_flag);
 
         EnterCriticalSection(&disp);
         printf("[THREAD %s CLIENT]:\n\tClosing thread..\n\n", params.service_name);
@@ -1336,6 +1360,7 @@
                                                 ++service_idx;
 
                                                 client_thr_param->end_thr_flag = params.end_thr_flag;
+                                                client_thr_param->socket_data_accepted = (*params.client_socket_params)->At(service_idx , *params.client_socket_params);
                                                 *client_handle->handle = CreateThread(NULL, 0, &ClientReqHandleThr, client_thr_param, 0, params.threadIDs + thread_counter);
                                                 (*params.client_req_handle)->Insert(client_handle, params.client_req_handle);
                                                 (*params.client_socket_params)->Insert(client_socket, params.client_socket_params);
@@ -1381,8 +1406,11 @@
                                             EnterCriticalSection(&disp);
                                         }
 
-                                        new_names->Dispose();
-                                        free(new_names);
+                                        if (new_names != NULL)
+                                        {
+                                            new_names->Dispose();
+                                            free(new_names);
+                                        }
                                         PrintServicesAndBuffs(*params.service_names, *params.service_buffers_in, *params.service_buffers_out, *params.input_buffer, *params.ack_buffer);
                                         is_cl_acceptable = true;
                                         LeaveCriticalSection(&disp);
@@ -1912,6 +1940,14 @@ int main()
         char ip_formatted[13];
         int validClientsSockets = 0;
 
+        //As mailbox for connect fetching
+        for (int loc = 0; loc < MAX_SERVICES_HOSTED * 2; ++loc)
+        {
+            SOCKET_DATA* new_data = (SOCKET_DATA*)malloc(sizeof(SOCKET_DATA));
+            new_data->Initialize();
+            new_data->Insert(new_data, &client_sock_params);
+        }
+
         SERVICE_NAME* service_names_it = service_names;
         char service_name[MAX_BUFF_NAME + 1];
         bool* accept_triggers = (bool*)(malloc(sizeof(bool) * MAX_SERVICES_HOSTED * 2));   
@@ -1993,6 +2029,7 @@ int main()
                 client_thr_param->accept_trigger = &(accept_triggers[loc]);         // Needed for fetch awakening (same index as service name)
 
                 client_thr_param->end_thr_flag = &thr_shudown_flag;
+                client_thr_param->socket_data_accepted = client_sock_params->At(loc, client_sock_params);
                 *client_handle->handle = CreateThread(NULL, 0, &ClientReqHandleThr, client_thr_param, 0, thread_IDs + thread_counter);
                 client_req_handle->Insert(client_handle, &client_req_handle);
                 client_sock_params->Insert(client_socket, &client_sock_params);
@@ -2153,8 +2190,10 @@ int main()
         client_register_params.service_names = service_names;
         client_register_params.client_socket_params = client_sock_params;
 
-
+        
         *handle_client_lst->handle = CreateThread(NULL, 0, &ClientRegisterThr, &client_register_params, 0, thread_IDs + thread_counter);
+        ++thread_counter;
+   
         listen_sock_handles->Insert(handle_client_lst, &listen_sock_handles);
         ++thread_counter;
         

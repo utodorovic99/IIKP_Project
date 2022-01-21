@@ -44,14 +44,16 @@ typedef struct BUFF_PARAMS
 // Structure acting as circular buffer descriptor, contains attributes associated with buffer. Supports list organisation. 
 typedef struct BUFF_DESC
 {
-	char context;       // Buffer type code
-	char* name;         // Null terminated string containing buffer name (formatted by service & context)
-	unsigned capacity;  // Buffer capacity
-	char* memory;       // Buffer memory
-	unsigned start;     // Used memory start index
-	unsigned stop;      // Used memory stop index
-    unsigned messges_enqueued; // Total numbers of messages enqueued
-    BUFF_DESC* next;    // Pointer to next liste element
+	char context;               // Buffer type code
+	char* name;                 // Null terminated string containing buffer name (formatted by service & context)
+	unsigned capacity;          // Buffer capacity
+    unsigned free_capacity;		// Free capacity	
+	char* memory;               // Buffer memory
+    unsigned head;              // Used memory start index (where queue is consumed)
+    unsigned tail;              // First free index after used memory stop
+    unsigned messges_enqueued;  // Total numbers of messages enqueued
+    BUFF_DESC* next;            // Pointer to next liste element
+    CRITICAL_SECTION cs;
 
     // Finds first buffer descriptor by name
     // const char* name - target name
@@ -77,7 +79,23 @@ typedef struct BUFF_DESC
         next = NULL;
         name = NULL;
         messges_enqueued = 0; // Total numbers of messages enqueued
+        free_capacity = capacity;
+        head = 0;
+        tail = 0;
+        InitializeCriticalSection(&cs);
 	}
+
+    //Flushes buffer
+    void Clear()
+    {
+        EnterCriticalSection(&cs);
+        memset(memory, 0, capacity);
+        messges_enqueued = 0; // Total numbers of messages enqueued
+        free_capacity = capacity;
+        head = 0;
+        tail = 0;
+        LeaveCriticalSection(&cs);
+    }
 
     // Safe dispose of allocated memory (for list)
 	bool Dispose()
@@ -94,14 +112,15 @@ typedef struct BUFF_DESC
             name = NULL;
             return true;
         }
+        DeleteCriticalSection(&cs);
 	}
 
     // Prepares structure content
 	void Prepare()
 	{
 		memset(memory, 0, capacity);
-		start = 0;
-		stop = 0;
+		head = 0;
+		tail = 0;
 	}
 
     // Inserts element at the end of the list
@@ -159,8 +178,8 @@ typedef struct BUFF_DESC
         next = NULL;
     }
 
-    // Prints formatted list content
-    // BUFF_DESC* head - list head
+    //Prints formatted list content
+    //BUFF_DESC* head - list head
     void PrintOut(BUFF_DESC* head)
     {
         BUFF_DESC* it = head;
@@ -171,15 +190,196 @@ typedef struct BUFF_DESC
         }
     }
 
-    // TODO:
-    // Stores message into circular buffer
-    bool Enqueue(char* msg, unsigned mess_buff_size) { ++messges_enqueued; return true; }
 
-    // TODO:
-    // Takes message from circular buffer
+    // Stores message into circular buffer
+    // char* mess_buff          - buffer containing message
+    //unsigned mess_buff_size   - buffer size
+    bool Enqueue(char* mess_buff, unsigned mess_buff_size)
+    {
+        EnterCriticalSection(&cs);
+        if (4 + mess_buff_size > free_capacity)	
+        {
+            LeaveCriticalSection(&cs); return false;
+        }
+
+        //Check if message is splitted by circular organisation
+        int chunk_size = capacity - tail;
+        if (chunk_size >= 4 + mess_buff_size)	
+        {
+            *((unsigned*)(memory + tail)) = mess_buff_size;		
+            tail += 4;									
+            memcpy(memory + tail, mess_buff + 4, mess_buff_size);			
+            tail += mess_buff_size;								
+        }
+        else if (chunk_size == 3)	
+        {
+            memcpy(memory + tail, (char*)&mess_buff_size, 3);		
+            tail = 0;									
+            memcpy(memory + tail, (char*)&mess_buff_size, 1);		
+            ++tail;									
+            memcpy(memory + tail, mess_buff + 4, mess_buff_size);			
+            tail += mess_buff_size;								
+        }
+        else if (chunk_size == 2)	
+        {
+            memcpy(memory + tail, (char*)&mess_buff_size, 2);
+            tail = 0;
+            memcpy(memory + tail, (char*)&mess_buff_size, 2);
+            tail += 2;
+            memcpy(memory + tail, mess_buff + 4, mess_buff_size);
+            tail += mess_buff_size;
+        }
+        else if (chunk_size == 1)	
+        {
+            memcpy(memory + tail, (char*)&mess_buff_size, 1);
+            tail = 0;
+            memcpy(memory + tail, (char*)&mess_buff_size, 3);
+            tail += 3;
+            memcpy(memory + tail, mess_buff + 4, mess_buff_size);
+            tail += mess_buff_size;
+        }
+        else                       
+        {
+            *((unsigned*)(memory + tail)) = mess_buff_size;
+            tail += 4;
+            chunk_size -= 4;
+            memcpy(memory + tail, mess_buff + 4, chunk_size);
+            tail = 0;
+            memcpy(memory + tail, mess_buff + 4 + chunk_size, mess_buff_size - chunk_size);
+            tail += (mess_buff_size - chunk_size);
+        }
+        free_capacity -= (4 + mess_buff_size);
+        ++messges_enqueued;
+        LeaveCriticalSection(&cs);
+        return true;
+    }
+
+    // Takes message from circular buffer 
     // char* mess_buff      - message buff (acts as return value)
-    // char mess_buff_size  - message buff size
-    bool Dequeue(char* mess_buff)                    { --messges_enqueued; return true; }
+    // unsigned buff_size   - message buff size
+    bool Dequeue(char* mess_buff, unsigned buff_size)
+    {
+        EnterCriticalSection(&cs);
+        if (free_capacity == capacity)
+        {
+            LeaveCriticalSection(&cs); return false;
+        }
+        memset(mess_buff, 0, buff_size);
+
+        int chunk_size;
+        if (tail < head)						
+            chunk_size = capacity - head;
+        else
+            chunk_size = tail - head;
+
+
+        unsigned msg_size = 0;
+        if (chunk_size >= 4)
+        {
+            msg_size = *((unsigned*)(memory + head));
+
+            if (chunk_size == 4)	head = 0;
+            else					head += 4;
+        }
+        else if (chunk_size == 3)
+        {
+            memcpy((char*)&msg_size, memory + head, 3);
+            head = 0;
+            memcpy(((char*)&msg_size) + 3, memory + head, 1);
+            head = 1;
+        }
+        else if (chunk_size == 2)
+        {
+            ((char*)&msg_size)[0] = memory[tail];
+            memcpy((char*)&msg_size, memory + head, 2);
+            head = 0;
+            memcpy(((char*)&msg_size) + 2, memory + head, 2);
+            head = 2;
+        }
+        else if (chunk_size == 1)
+        {
+
+            ((char*)&msg_size)[0] = memory[tail];
+            memcpy((char*)&msg_size, memory + head, 1);
+            head = 0;
+            memcpy(((char*)&msg_size) + 1, memory + head, 3);
+            head = 3;
+        }
+
+        free_capacity += (4 + msg_size);							   
+        if (tail > head && tail - head >= msg_size)	
+        {
+            memcpy(mess_buff, memory + head, msg_size);
+            head += msg_size;
+        }
+        else                                                           
+        {
+            chunk_size = capacity - head;					
+            memcpy(mess_buff, memory + head, chunk_size);		
+            msg_size = capacity - head;						
+            head = 0;											
+            memcpy(mess_buff, memory + chunk_size, msg_size);       
+            head = msg_size;										
+        }
+        --messges_enqueued;
+        LeaveCriticalSection(&cs);
+        return true;
+    }
+
+    //Check size of first element to be dequeued
+    unsigned PreDeqSize()
+    {
+        EnterCriticalSection(&cs);
+        int chunk_size;
+        if (tail < head)
+            chunk_size = capacity - head;
+        else
+            chunk_size = tail - head;
+
+
+        unsigned msg_size = 0;
+        unsigned head_it=head;
+        if (chunk_size >= 4)
+        {
+            msg_size = *((unsigned*)(memory + head));
+
+            if (chunk_size == 4)	head_it = 0;
+            else					head_it += 4;
+        }
+        else if (chunk_size == 3)
+        {
+            memcpy((char*)&msg_size, memory + head_it, 3);
+            head_it = 0;
+            memcpy(((char*)&msg_size) + 3, memory + head_it, 1);
+            head_it = 1;
+        }
+        else if (chunk_size == 2)
+        {
+            ((char*)&msg_size)[0] = memory[tail];
+            memcpy((char*)&msg_size, memory + head_it, 2);
+            head_it = 0;
+            memcpy(((char*)&msg_size) + 2, memory + head_it, 2);
+            head_it = 2;
+        }
+        else if (chunk_size == 1)
+        {
+
+            ((char*)&msg_size)[0] = memory[tail];
+            memcpy((char*)&msg_size, memory + head_it, 1);
+            head_it = 0;
+            memcpy(((char*)&msg_size) + 1, memory + head_it, 3);
+            head_it = 3;
+        }
+        LeaveCriticalSection(&cs);
+        return head_it;
+    }
+
+    //Check if enough size for element to be pushed 
+    //unsigned contenet_size    - message content size (not incl. 4B of size )
+    bool IsEnqueueable(unsigned contenet_size)
+    {
+        return (4+ contenet_size) <= free_capacity;
+    }
 
 }BUFF_DESC;
 
