@@ -115,14 +115,6 @@ typedef struct BUFF_DESC
         DeleteCriticalSection(&cs);
 	}
 
-    // Prepares structure content
-	void Prepare()
-	{
-		memset(memory, 0, capacity);
-		head = 0;
-		tail = 0;
-	}
-
     // Inserts element at the end of the list
     // BUFF_DESC* new_el - to insert element
     // BUFF_DESC** head  - pointer to head of the list for buffer descriptor
